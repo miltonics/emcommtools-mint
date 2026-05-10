@@ -1,0 +1,21 @@
+---
+# roles/fldigi/tasks/main.yml
+
+- name: Install fldigi suite
+  ansible.builtin.apt:
+    name:
+      - fldigi
+      - flmsg
+      - flamp
+      - flwrap
+    state: present
+  tags: [fldigi]
+
+- name: Create fldigi config directory
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/.fldigi"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [fldigi]

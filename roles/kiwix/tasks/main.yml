@@ -1,0 +1,73 @@
+---
+# roles/kiwix/tasks/main.yml
+# Kiwix: offline Wikipedia and documentation viewer
+
+- name: Add Kiwix apt repo key
+  ansible.builtin.get_url:
+    url: https://download.kiwix.org/release/kiwix-tools/kiwix-tools_linux-x86_64.tar.gz
+    dest: /tmp/kiwix-tools.tar.gz
+    mode: "0644"
+  tags: [kiwix]
+  # NOTE: Kiwix does not have a standard PPA. We install the static binary.
+
+- name: Create Kiwix install directory
+  ansible.builtin.file:
+    path: /opt/kiwix
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [kiwix]
+
+- name: Extract Kiwix tools
+  ansible.builtin.unarchive:
+    src: /tmp/kiwix-tools.tar.gz
+    dest: /opt/kiwix
+    remote_src: true
+    extra_opts: [--strip-components=1]
+  tags: [kiwix]
+
+- name: Symlink kiwix binaries to /usr/local/bin
+  ansible.builtin.file:
+    src: "/opt/kiwix/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - kiwix-serve
+    - kiwix-search
+    - kiwix-manage
+  tags: [kiwix]
+
+- name: Create Kiwix library directory for user
+  ansible.builtin.file:
+    path: "{{ kiwix_library_dir }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [kiwix]
+
+- name: Install Kiwix systemd service (serve library offline)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/kiwix.service
+    content: |
+      [Unit]
+      Description=Kiwix offline content server
+      After=network.target
+
+      [Service]
+      Type=simple
+      User={{ radio_user }}
+      ExecStart=/usr/local/bin/kiwix-serve \
+        --library {{ kiwix_library_dir }}/library.xml \
+        --port 8888
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+  tags: [kiwix]

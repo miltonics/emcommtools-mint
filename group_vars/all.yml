@@ -1,0 +1,82 @@
+---
+# =============================================================================
+# group_vars/all.yml  —  EDIT THIS FILE BEFORE RUNNING THE PLAYBOOK
+#
+# Operator identity (callsign, grid, name, Winlink password) is NOT set here.
+# Run  et-user  after installation to set those interactively.
+# They are stored in /etc/hamradio/state and read by all et-* commands.
+# =============================================================================
+
+# --- Target user (the human who will use the radio software) ---
+# Defaults to the user who runs sudo. Override if needed.
+radio_user: "{{ ansible_env.SUDO_USER | default(ansible_user_id) }}"
+radio_user_home: "/home/{{ radio_user }}"
+
+# --- Install paths ---
+hamradio_bin_dir: "/usr/local/bin"   # et-* commands go here
+hamradio_etc_dir: "/etc/hamradio"    # runtime config written by et-radio/et-mode
+hamradio_lib_dir: "/var/lib/hamradio"
+hamradio_log_dir: "/var/log/hamradio"
+
+# --- Audio ---
+# ALSA loopback is the default inter-app audio bus (same approach as ETC).
+# Set to true if you want PipeWire virtual sinks as well.
+audio_use_pipewire_virtuals: true
+audio_alsa_loopback: true
+
+# --- Direwolf ---
+# Callsign is read from /etc/hamradio/state at runtime by et-mode.
+# The config template uses a placeholder; et-mode rewrites it on each launch.
+direwolf_audio_device: "plughw:Loopback,0"
+direwolf_baud: 1200
+
+# --- ARDOP ---
+# ardopc binary source. Options: "repo" (apt) or "binary" (download from WB2OSZ).
+# "binary" is more up to date but requires accepting the license.
+ardop_install_method: "binary"
+ardop_binary_url: "http://www.cantab.net/users/john.wiseman/Downloads/Latest/ardopc"
+
+# --- JS8Call ---
+# install_method options:
+#   "appimage"  — download the prebuilt AppImage (fast, ~15 min build not needed)
+#   "build"     — run the upstream build script (compiles from source, ~15-20 min,
+#                 fixes dark-mode theming issues some Mint installs show)
+js8call_install_method: "appimage"
+
+# --- WSJT-X ---
+# Callsign/grid are read from /etc/hamradio/state at runtime.
+
+# --- LinBPQ ---
+# Callsign/sysop are read from /etc/hamradio/state at runtime.
+linbpq_ssid: 7                       # node will be CALLSIGN-7
+
+# --- (tr)uSDX ---
+# Set to true to install the miltonics truSDX-Linux driver
+trusdx_install: true
+trusdx_repo_url: "https://github.com/miltonics/truSDX-Linux.git"
+trusdx_install_dir: "{{ radio_user_home }}/truSDX-Linux"
+
+# --- SDR++ ---
+sdrpp_install_method: "ppa"          # "ppa" or "build" (build takes ~20 min)
+
+# --- Kiwix ---
+kiwix_install: true
+kiwix_library_dir: "{{ radio_user_home }}/kiwix-library"
+
+# --- VOACAP ---
+voacap_install: true
+
+# --- WINE/VARA ---
+# VARA is Windows-only software running under Wine.
+# Set to true only if you need VARA FM or VARA HF.
+# This will NOT be installed by default — it requires manual license acceptance.
+vara_install: false
+
+# --- GPS ---
+# chrony is used to sync time from GPS when available.
+gps_chrony_enable: true
+
+# --- Offline maps ---
+# Set your US state abbreviation for Navit offline map, or leave empty to skip.
+# Example: "WA", "TX", "FL"
+offline_map_state: ""

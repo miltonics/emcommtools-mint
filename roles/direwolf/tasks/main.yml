@@ -1,0 +1,52 @@
+---
+# roles/direwolf/tasks/main.yml
+# Direwolf: software TNC for AX.25 packet, APRS, Winlink over VHF.
+# Installed from apt. Config template written for et-mode to consume.
+
+- name: Install Direwolf
+  ansible.builtin.apt:
+    name:
+      - direwolf
+      - ax25-tools
+      - ax25-apps
+    state: present
+  tags: [direwolf]
+
+- name: Create Direwolf config directory
+  ansible.builtin.file:
+    path: "{{ hamradio_etc_dir }}/direwolf"
+    state: directory
+    mode: "0755"
+  tags: [direwolf]
+
+- name: Install Direwolf base config template
+  ansible.builtin.template:
+    src: direwolf.conf.j2
+    dest: "{{ hamradio_etc_dir }}/direwolf/direwolf.conf"
+    owner: root
+    group: "{{ radio_user }}"
+    mode: "0664"
+  tags: [direwolf]
+
+- name: Install Direwolf systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/direwolf.service
+    content: |
+      [Unit]
+      Description=Direwolf AX.25 software TNC
+      After=sound.target
+
+      [Service]
+      Type=simple
+      User={{ radio_user }}
+      ExecStart=/usr/bin/direwolf -c {{ hamradio_etc_dir }}/direwolf/direwolf.conf -t 0
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+  tags: [direwolf]

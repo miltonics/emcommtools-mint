@@ -1,0 +1,114 @@
+---
+# roles/trusdx/tasks/main.yml
+# Installs the miltonics truSDX-Linux driver.
+# Tested on Mint 22.1 per the upstream README.
+
+- name: Install truSDX Python dependencies (system)
+  ansible.builtin.apt:
+    name:
+      - python3-serial
+      - python3-pyaudio
+      - portaudio19-dev
+      - socat
+    state: present
+  when: trusdx_install | bool
+  tags: [trusdx]
+
+- name: Clone truSDX-Linux repository
+  ansible.builtin.git:
+    repo: "{{ trusdx_repo_url }}"
+    dest: "{{ trusdx_install_dir }}"
+    version: main
+    update: true
+  become: true
+  become_user: "{{ radio_user }}"
+  when: trusdx_install | bool
+  tags: [trusdx]
+
+- name: Create Python venv for truSDX
+  ansible.builtin.command:
+    cmd: python3 -m venv "{{ trusdx_install_dir }}/venv"
+    creates: "{{ trusdx_install_dir }}/venv/bin/activate"
+  become: true
+  become_user: "{{ radio_user }}"
+  when: trusdx_install | bool
+  tags: [trusdx]
+
+- name: Install truSDX Python requirements into venv
+  ansible.builtin.pip:
+    requirements: "{{ trusdx_install_dir }}/requirements.txt"
+    virtualenv: "{{ trusdx_install_dir }}/venv"
+    state: present
+  become: true
+  become_user: "{{ radio_user }}"
+  when: trusdx_install | bool
+  tags: [trusdx]
+
+- name: Add udev rule for CH340/CH341 (truSDX USB chip)
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/99-trusdx.rules
+    content: |
+      # (tr)uSDX CH340/CH341 USB-serial adapter
+      SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+        SYMLINK+="ttyTRUSDX", MODE="0666", GROUP="dialout", \
+        RUN+="/bin/setserial %E{DEVNAME} low_latency"
+      SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", \
+        SYMLINK+="ttyTRUSDX", MODE="0666", GROUP="dialout", \
+        RUN+="/bin/setserial %E{DEVNAME} low_latency"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload udev
+  when: trusdx_install | bool
+  tags: [trusdx]
+
+- name: Install truSDX systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/trusdx.service
+    content: |
+      [Unit]
+      Description=(tr)uSDX CAT driver (Kenwood TS-480 emulator)
+      After=sound.target
+      Wants=sound.target
+
+      [Service]
+      Type=simple
+      User={{ radio_user }}
+      WorkingDirectory={{ trusdx_install_dir }}
+      ExecStart={{ trusdx_install_dir }}/venv/bin/python3 \
+        {{ trusdx_install_dir }}/trusdx-txrx-AI.py
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+  when: trusdx_install | bool
+  tags: [trusdx]
+
+- name: Install et-trusdx helper command
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-trusdx"
+    content: |
+      #!/bin/bash
+      # et-trusdx — manage the (tr)uSDX driver service
+      # Usage: et-trusdx {start|stop|status|restart|log}
+      case "${1:-status}" in
+        start)   sudo systemctl start trusdx ;;
+        stop)    sudo systemctl stop trusdx ;;
+        restart) sudo systemctl restart trusdx ;;
+        status)  systemctl status trusdx ;;
+        log)     journalctl -u trusdx -f ;;
+        *)
+          echo "Usage: et-trusdx {start|stop|status|restart|log}"
+          exit 1
+          ;;
+      esac
+    owner: root
+    group: root
+    mode: "0755"
+  when: trusdx_install | bool
+  tags: [trusdx]

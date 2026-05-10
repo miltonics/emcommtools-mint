@@ -1,0 +1,88 @@
+---
+# =============================================================================
+# Ham Radio Mint Setup - Master Playbook
+# Target: Linux Mint 21.x / 22.x (Ubuntu 22.04/24.04 base)
+#
+# Usage:
+#   Full install:        ansible-playbook site.yml -K
+#   Specific role:       ansible-playbook site.yml --tags trusdx -K
+#   Skip a role:         ansible-playbook site.yml --skip-tags kiwix -K
+#   Dry run:             ansible-playbook site.yml -K --check
+#
+# Tags map 1:1 to role names. Multiple tags can be combined:
+#   ansible-playbook site.yml --tags "base,audio,trusdx" -K
+# =============================================================================
+
+- name: Ham Radio Mint Setup
+  hosts: localhost
+  connection: local
+  become: true
+
+  vars_files:
+    - group_vars/all.yml
+
+  roles:
+    # --- Foundation (always run first) ---
+    - role: base
+      tags: [base, always_base]
+
+    - role: audio
+      tags: [audio]
+
+    # --- Rig control (dependency for most modes) ---
+    - role: hamlib
+      tags: [hamlib]
+
+    # --- Digital mode TNCs and modems ---
+    - role: direwolf
+      tags: [direwolf]
+
+    - role: ardop
+      tags: [ardop]
+
+    # --- Digital mode applications ---
+    - role: wsjtx
+      tags: [wsjtx]
+
+    - role: js8call
+      tags: [js8call]
+
+    - role: fldigi
+      tags: [fldigi]
+
+    # --- Winlink / Pat ---
+    - role: pat
+      tags: [pat]
+
+    # --- Packet / BBS ---
+    - role: linbpq
+      tags: [linbpq]
+
+    - role: paracon
+      tags: [paracon]
+
+    - role: chattervox
+      tags: [chattervox]
+
+    # --- APRS ---
+    - role: yaac
+      tags: [yaac]
+
+    # --- SDR ---
+    - role: sdrpp
+      tags: [sdrpp]
+
+    # --- Propagation / offline tools ---
+    - role: voacap
+      tags: [voacap]
+
+    - role: kiwix
+      tags: [kiwix]
+
+    # --- (tr)uSDX-specific driver ---
+    - role: trusdx
+      tags: [trusdx]
+
+    # --- Glue: et-* commands, udev rules, systemd services ---
+    - role: glue
+      tags: [glue]

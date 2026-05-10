@@ -1,0 +1,75 @@
+---
+# roles/ardop/tasks/main.yml
+# ardopc: HF soundcard modem for Winlink over HF.
+# ETC patched the kernel for ARDOP on 22.10; on Mint 22 (6.x kernel) this
+# is generally not needed, but we note any issues in docs/ARDOP_NOTES.md.
+
+- name: Install ARDOP audio dependencies
+  ansible.builtin.apt:
+    name:
+      - libhamlib-dev
+      - portaudio19-dev
+    state: present
+  tags: [ardop]
+
+- name: Check if ardopc binary already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/ardopc
+  register: ardopc_stat
+  tags: [ardop]
+
+- name: Download ardopc binary (WB2OSZ build)
+  ansible.builtin.get_url:
+    url: "{{ ardop_binary_url }}"
+    dest: /usr/local/bin/ardopc
+    mode: "0755"
+    owner: root
+    group: root
+  when:
+    - ardop_install_method == "binary"
+    - not ardopc_stat.stat.exists
+  tags: [ardop]
+
+- name: Install ardopc systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ardopc.service
+    content: |
+      [Unit]
+      Description=ARDOP HF modem (ardopc)
+      After=sound.target
+
+      [Service]
+      Type=simple
+      User={{ radio_user }}
+      EnvironmentFile={{ hamradio_etc_dir }}/state
+      ExecStart=/usr/local/bin/ardopc 8515 ${RADIO_AUDIO_CAPTURE} ${RADIO_AUDIO_PLAY}
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+  tags: [ardop]
+
+- name: Write ARDOP kernel tuning notes
+  ansible.builtin.copy:
+    dest: "{{ hamradio_lib_dir }}/ARDOP_NOTES.md"
+    content: |
+      # ARDOP Kernel Notes
+
+      EmComm Tools OS patched the Ubuntu 22.10 kernel for ARDOP latency issues.
+      Linux Mint 22 ships with kernel 6.8+, which generally does not need these
+      patches. If you experience ARDOP audio underruns, try:
+
+        echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-hamradio.conf
+        sudo sysctl -p /etc/sysctl.d/99-hamradio.conf
+
+      You can also try setting the process priority:
+        sudo renice -n -10 $(pgrep ardopc)
+
+      See: https://github.com/wb2osz/ardop for the latest ardopc source.
+    force: false
+  tags: [ardop]

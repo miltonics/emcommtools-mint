@@ -1,0 +1,195 @@
+---
+# roles/glue/tasks/main.yml
+# The et-* command layer: equivalents of ETC's et-user, et-radio, et-mode.
+# These are the three commands operators actually use day-to-day.
+
+- name: Install et-user (set callsign, grid, name, Winlink password)
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-user"
+    content: |
+      #!/bin/bash
+      # et-user — set operator identity
+      # Writes to /etc/hamradio/state, which all other et-* commands read.
+      # Also updates Pat's config.json with the new callsign/password.
+      STATE={{ hamradio_etc_dir }}/state
+      PAT_CONFIG="${HOME}/.config/pat/config.json"
+
+      CURRENT_CALL=$(grep ^CALLSIGN= $STATE | cut -d= -f2)
+      CURRENT_GRID=$(grep ^GRIDSQUARE= $STATE | cut -d= -f2)
+      CURRENT_NAME=$(grep ^OPERATOR_NAME= $STATE | cut -d= -f2)
+
+      echo ""
+      echo "=== et-user: Operator Identity Setup ==="
+      echo ""
+      [ -n "$CURRENT_CALL" ] && echo "  Current callsign:  $CURRENT_CALL"
+      [ -n "$CURRENT_GRID" ] && echo "  Current grid:      $CURRENT_GRID"
+      [ -n "$CURRENT_NAME" ] && echo "  Current name:      $CURRENT_NAME"
+      echo ""
+
+      read -p "Callsign: " NEW_CALL
+      read -p "Grid square (e.g. FN31pr): " NEW_GRID
+      read -p "Your name: " NEW_NAME
+      read -s -p "Winlink password (leave blank to keep current): " NEW_WLPASS
+      echo ""
+
+      # Update non-blank fields
+      if [ -n "$NEW_CALL" ]; then
+        NEW_CALL="${NEW_CALL^^}"   # force uppercase
+        sudo sed -i "s|^CALLSIGN=.*|CALLSIGN=${NEW_CALL}|" $STATE
+      fi
+      [ -n "$NEW_GRID" ]   && sudo sed -i "s|^GRIDSQUARE=.*|GRIDSQUARE=${NEW_GRID}|" $STATE
+      [ -n "$NEW_NAME" ]   && sudo sed -i "s|^OPERATOR_NAME=.*|OPERATOR_NAME=${NEW_NAME}|" $STATE
+      if [ -n "$NEW_WLPASS" ]; then
+        sudo sed -i "s|^WINLINK_PASSWORD=.*|WINLINK_PASSWORD=${NEW_WLPASS}|" $STATE
+        # Also update Pat config if it exists
+        if [ -f "$PAT_CONFIG" ] && command -v jq &>/dev/null; then
+          TMP=$(mktemp)
+          jq --arg pw "$NEW_WLPASS" '.secure_login_password = $pw' "$PAT_CONFIG" > "$TMP"
+          mv "$TMP" "$PAT_CONFIG"
+        fi
+      fi
+      # Update Pat callsign too
+      if [ -n "$NEW_CALL" ] && [ -f "$PAT_CONFIG" ] && command -v jq &>/dev/null; then
+        TMP=$(mktemp)
+        jq --arg cs "$NEW_CALL" '.mycall = $cs' "$PAT_CONFIG" > "$TMP"
+        mv "$TMP" "$PAT_CONFIG"
+      fi
+
+      echo ""
+      echo "Identity saved. Run 'et-info' to confirm."
+      echo ""
+      source $STATE
+      echo "  CALLSIGN:  ${CALLSIGN}"
+      echo "  GRIDSQUARE:${GRIDSQUARE}"
+      echo "  NAME:      ${OPERATOR_NAME}"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]
+
+- name: Install et-radio (select radio, detect port, write state)
+  ansible.builtin.template:
+    src: et-radio.j2
+    dest: "{{ hamradio_bin_dir }}/et-radio"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]
+
+- name: Install et-mode (switch operating mode, rewire configs)
+  ansible.builtin.template:
+    src: et-mode.j2
+    dest: "{{ hamradio_bin_dir }}/et-mode"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]
+
+- name: Install et-info (show current system state — like ETC's conky widget)
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-info"
+    content: |
+      #!/bin/bash
+      # et-info — display current hamradio system state
+      STATE={{ hamradio_etc_dir }}/state
+      source $STATE
+
+      echo ""
+      echo "╔══════════════════════════════════════╗"
+      echo "║       Ham Radio Mint System Info      ║"
+      echo "╠══════════════════════════════════════╣"
+      printf "║  %-10s %-24s ║\n" "CALLSIGN:" "${CALLSIGN:-N0CALL}"
+      printf "║  %-10s %-24s ║\n" "GRID:"     "${GRIDSQUARE:-AA00}"
+      printf "║  %-10s %-24s ║\n" "RADIO:"    "${RADIO:-none}"
+      printf "║  %-10s %-24s ║\n" "PORT:"     "${RADIO_PORT:-none}"
+      printf "║  %-10s %-24s ║\n" "AUDIO:"    "${RADIO_AUDIO:-none}"
+      printf "║  %-10s %-24s ║\n" "MODE:"     "${MODE:-none}"
+      echo "╠══════════════════════════════════════╣"
+      # Show rigctld status
+      if systemctl is-active --quiet "rigctld@${RADIO_MODEL:-0}" 2>/dev/null; then
+        printf "║  %-10s %-24s ║\n" "CAT:" "Connected ✓"
+      else
+        printf "║  %-10s %-24s ║\n" "CAT:" "Disconnected"
+      fi
+      echo "╚══════════════════════════════════════╝"
+      echo ""
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]
+
+- name: Install et-time (GPS time status)
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-time"
+    content: |
+      #!/bin/bash
+      # et-time — show GPS/NTP time sync status
+      echo "=== System Time ==="
+      date
+      echo ""
+      echo "=== Chrony Sources ==="
+      chronyc sources 2>/dev/null || echo "(chrony not running)"
+      echo ""
+      echo "=== GPS Status ==="
+      gpspipe -w -n 3 2>/dev/null | python3 -c "
+      import sys, json
+      for line in sys.stdin:
+          try:
+              d = json.loads(line)
+              if d.get('class') == 'TPV':
+                  print(f\"  Fix: {d.get('mode',0)}D  Lat: {d.get('lat','?')}  Lon: {d.get('lon','?')}\")
+                  break
+          except: pass
+      " || echo "(gpsd not running or no fix)"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]
+
+- name: Install et-user-backup
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-user-backup"
+    content: |
+      #!/bin/bash
+      # et-user-backup — back up ham radio config and Winlink mail
+      BACKUP_DIR="${HOME}/hamradio-backup-$(date +%Y%m%d-%H%M%S)"
+      mkdir -p "$BACKUP_DIR"
+      cp {{ hamradio_etc_dir }}/state "$BACKUP_DIR/"
+      [ -d ~/.config/pat ]    && cp -r ~/.config/pat    "$BACKUP_DIR/"
+      [ -d ~/.config/JS8Call ] && cp -r ~/.config/JS8Call "$BACKUP_DIR/"
+      [ -d ~/.config/WSJT-X ] && cp -r ~/.config/WSJT-X  "$BACKUP_DIR/"
+      [ -d ~/.fldigi ]         && cp -r ~/.fldigi          "$BACKUP_DIR/"
+      [ -d ~/linbpq ]          && cp    ~/linbpq/bpq32.cfg "$BACKUP_DIR/" 2>/dev/null
+      tar -czf "${BACKUP_DIR}.tar.gz" -C "$(dirname $BACKUP_DIR)" "$(basename $BACKUP_DIR)"
+      rm -rf "$BACKUP_DIR"
+      echo "Backup saved: ${BACKUP_DIR}.tar.gz"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]
+
+- name: Install et-user-restore
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-user-restore"
+    content: |
+      #!/bin/bash
+      # et-user-restore — restore a backup created by et-user-backup
+      if [ -z "$1" ]; then
+        echo "Usage: et-user-restore <backup.tar.gz>"
+        exit 1
+      fi
+      TMPDIR=$(mktemp -d)
+      tar -xzf "$1" -C "$TMPDIR"
+      BACKUP=$(ls "$TMPDIR")
+      [ -f "$TMPDIR/$BACKUP/state" ]      && sudo cp "$TMPDIR/$BACKUP/state" {{ hamradio_etc_dir }}/
+      [ -d "$TMPDIR/$BACKUP/pat" ]        && cp -r "$TMPDIR/$BACKUP/pat"     ~/.config/
+      [ -d "$TMPDIR/$BACKUP/JS8Call" ]    && cp -r "$TMPDIR/$BACKUP/JS8Call" ~/.config/
+      [ -d "$TMPDIR/$BACKUP/WSJT-X" ]    && cp -r "$TMPDIR/$BACKUP/WSJT-X"  ~/.config/
+      [ -d "$TMPDIR/$BACKUP/.fldigi" ]    && cp -r "$TMPDIR/$BACKUP/.fldigi" ~/
+      [ -f "$TMPDIR/$BACKUP/bpq32.cfg" ]  && cp    "$TMPDIR/$BACKUP/bpq32.cfg" ~/linbpq/
+      rm -rf "$TMPDIR"
+      echo "Restore complete."
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]

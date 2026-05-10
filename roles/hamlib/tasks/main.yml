@@ -1,0 +1,54 @@
+---
+# roles/hamlib/tasks/main.yml
+# Hamlib provides rigctld — the backbone of all CAT control in ETC.
+# We install from apt (stable) and set up the systemd service template
+# that et-radio will instantiate when a radio is plugged in.
+
+- name: Install Hamlib
+  ansible.builtin.apt:
+    name:
+      - libhamlib-dev
+      - libhamlib-utils   # includes rigctld, rotctld
+      - python3-hamlib    # Python bindings
+    state: present
+  tags: [hamlib]
+
+- name: Install rigctld systemd service template
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/rigctld@.service
+    content: |
+      # rigctld@.service — parameterised rigctld instance
+      # Start with:  systemctl start rigctld@RADIO_MODEL_ID
+      # et-radio writes the model/port/baud into /etc/hamradio/state and
+      # the glue layer reads those to call: systemctl start rigctld@MODEL
+      [Unit]
+      Description=Hamlib rig control daemon (model %i)
+      After=network.target
+
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/hamradio/state
+      ExecStart=/usr/bin/rigctld \
+        --model=%i \
+        --rig-file=${RADIO_PORT} \
+        --serial-speed=${RADIO_BAUD:-9600} \
+        --listen-addr=127.0.0.1 \
+        --port=4532
+      Restart=on-failure
+      RestartSec=3
+      User={{ radio_user }}
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+  tags: [hamlib]
+
+- name: Verify rigctld is available
+  ansible.builtin.command: which rigctld
+  register: rigctld_path
+  changed_when: false
+  failed_when: rigctld_path.rc != 0
+  tags: [hamlib]

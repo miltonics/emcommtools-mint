@@ -1,0 +1,71 @@
+---
+# roles/paracon/tasks/main.yml
+# Paracon: packet radio terminal by Martin Cooper KD6YAM.
+# Distributed as a self-contained Python .pyz zipapp — NOT a .deb.
+# Repo: https://github.com/mfncooper/paracon
+# Requires: Python 3.9+, running Direwolf (AGWPE on port 8000)
+
+- name: Ensure Python 3.9+ is available (Paracon requirement)
+  ansible.builtin.apt:
+    name: python3
+    state: present
+  tags: [paracon]
+
+- name: Check if Paracon already installed
+  ansible.builtin.stat:
+    path: "{{ hamradio_bin_dir }}/paracon"
+  register: paracon_stat
+  tags: [paracon]
+
+- name: Get latest Paracon release info
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/mfncooper/paracon/releases/latest
+    return_content: true
+    headers:
+      Accept: "application/vnd.github.v3+json"
+  register: paracon_release
+  when: not paracon_stat.stat.exists
+  tags: [paracon]
+
+- name: Set Paracon .pyz download URL
+  ansible.builtin.set_fact:
+    paracon_pyz_url: >-
+      {{ paracon_release.json.assets
+         | selectattr('name', 'match', '.*\\.pyz$')
+         | map(attribute='browser_download_url')
+         | first }}
+  when: not paracon_stat.stat.exists
+  tags: [paracon]
+
+- name: Download Paracon .pyz
+  ansible.builtin.get_url:
+    url: "{{ paracon_pyz_url }}"
+    dest: "{{ hamradio_bin_dir }}/paracon"
+    mode: "0755"
+    owner: root
+    group: root
+  when: not paracon_stat.stat.exists
+  tags: [paracon]
+
+- name: Create Paracon config directory for user
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/.config/paracon"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [paracon]
+
+- name: Write Paracon baseline config
+  ansible.builtin.copy:
+    dest: "{{ radio_user_home }}/.config/paracon/paracon.ini"
+    content: |
+      [TNC]
+      # Direwolf AGWPE server
+      host = localhost
+      port = 8000
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    force: false
+  tags: [paracon]

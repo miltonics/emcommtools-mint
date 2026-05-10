@@ -1,0 +1,129 @@
+---
+# roles/audio/tasks/main.yml
+# Configure ALSA loopback (inter-app audio bus) and optionally PipeWire virtuals.
+# This mirrors what the truSDX-Linux setup.sh does, generalised for all modes.
+
+- name: Install audio stack packages
+  ansible.builtin.apt:
+    name:
+      - alsa-utils
+      - alsa-tools
+      - portaudio19-dev
+      - python3-pyaudio
+      - pipewire
+      - pipewire-audio-client-libraries
+      - pipewire-pulse
+      - wireplumber
+      - pavucontrol
+      - pulseaudio-utils   # pactl still useful with pipewire-pulse
+    state: present
+  tags: [audio]
+
+- name: Load ALSA loopback module now
+  community.general.modprobe:
+    name: snd-aloop
+    state: present
+  when: audio_alsa_loopback | bool
+  tags: [audio]
+
+- name: Persist ALSA loopback across reboots
+  ansible.builtin.lineinfile:
+    path: /etc/modules
+    line: snd-aloop
+    create: true
+  when: audio_alsa_loopback | bool
+  tags: [audio]
+
+- name: Configure ALSA loopback for 2 subdevices (rx + tx)
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/snd-aloop.conf
+    content: |
+      # ALSA loopback: 2 subdevices — card 0 for apps, card 1 for monitors
+      options snd-aloop enable=1 index=0 pcm_substreams=8
+    owner: root
+    group: root
+    mode: "0644"
+  when: audio_alsa_loopback | bool
+  tags: [audio]
+
+- name: Install ALSA loopback asoundrc snippet for radio user
+  ansible.builtin.blockinfile:
+    path: "{{ radio_user_home }}/.asoundrc"
+    create: true
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    marker: "# {mark} hamradio-mint-setup loopback"
+    block: |
+      # Ham radio ALSA loopback definitions
+      # hw:Loopback,0  -> write audio TO radio app (tx path)
+      # hw:Loopback,1  -> read audio FROM radio app (rx path)
+      pcm.radio_tx {
+          type hw
+          card Loopback
+          device 0
+      }
+      pcm.radio_rx {
+          type hw
+          card Loopback
+          device 1
+      }
+  when: audio_alsa_loopback | bool
+  tags: [audio]
+
+- name: Create PipeWire virtual radio sink/source
+  ansible.builtin.copy:
+    dest: /etc/pipewire/pipewire.conf.d/10-hamradio-virtual.conf
+    content: |
+      # Virtual PipeWire sink/source for ham radio applications
+      # Applications can use these as TRUSDX or trusdx_rx/trusdx_tx
+      context.objects = [
+        {
+          factory = adapter
+          args = {
+            factory.name     = support.null-audio-sink
+            node.name        = trusdx_tx
+            node.description = "Ham Radio TX (to radio)"
+            media.class      = Audio/Sink
+            audio.position   = [ FL FR ]
+            monitor.channel-volumes = true
+          }
+        }
+        {
+          factory = adapter
+          args = {
+            factory.name     = support.null-audio-sink
+            node.name        = trusdx_rx
+            node.description = "Ham Radio RX (from radio)"
+            media.class      = Audio/Source/Virtual
+            audio.position   = [ FL FR ]
+          }
+        }
+      ]
+    owner: root
+    group: root
+    mode: "0644"
+  when: audio_use_pipewire_virtuals | bool
+  tags: [audio]
+
+- name: Install audio helper script (list-audio-devices)
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-audio"
+    content: |
+      #!/bin/bash
+      # et-audio — list audio devices relevant to ham radio
+      echo "=== ALSA Capture Devices ==="
+      arecord -l 2>/dev/null || echo "(none)"
+      echo ""
+      echo "=== ALSA Playback Devices ==="
+      aplay -l 2>/dev/null || echo "(none)"
+      echo ""
+      echo "=== PipeWire/PulseAudio Sources ==="
+      pactl list short sources 2>/dev/null || echo "(PipeWire not running)"
+      echo ""
+      echo "=== PipeWire/PulseAudio Sinks ==="
+      pactl list short sinks 2>/dev/null || echo "(PipeWire not running)"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [audio]

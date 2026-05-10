@@ -1,0 +1,69 @@
+---
+# roles/linbpq/tasks/main.yml
+# LinBPQ: G8BPQ's packet node/BBS. Not in apt — binary from G8BPQ's site.
+
+- name: Install LinBPQ dependencies
+  ansible.builtin.apt:
+    name:
+      - libax25
+      - ax25-tools
+    state: present
+  tags: [linbpq]
+
+- name: Create LinBPQ directory
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/linbpq"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [linbpq]
+
+- name: Check if LinBPQ binary exists
+  ansible.builtin.stat:
+    path: "{{ radio_user_home }}/linbpq/linbpq"
+  register: linbpq_stat
+  tags: [linbpq]
+
+- name: Download LinBPQ binary
+  ansible.builtin.get_url:
+    url: "http://www.cantab.net/users/john.wiseman/Downloads/Latest/linbpq"
+    dest: "{{ radio_user_home }}/linbpq/linbpq"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  when: not linbpq_stat.stat.exists
+  tags: [linbpq]
+
+- name: Write LinBPQ base config (bpq32.cfg)
+  ansible.builtin.template:
+    src: bpq32.cfg.j2
+    dest: "{{ radio_user_home }}/linbpq/bpq32.cfg"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    force: false
+  tags: [linbpq]
+
+- name: Install LinBPQ systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/linbpq.service
+    content: |
+      [Unit]
+      Description=LinBPQ Packet Node
+      After=network.target direwolf.service
+
+      [Service]
+      Type=simple
+      User={{ radio_user }}
+      WorkingDirectory={{ radio_user_home }}/linbpq
+      ExecStart={{ radio_user_home }}/linbpq/linbpq
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+  tags: [linbpq]

@@ -1,0 +1,24 @@
+# JS8Call.ini — managed by hamradio-mint-setup
+# Location: ~/.config/JS8Call.ini  (JS8Call-improved v2.4+)
+# Callsign and grid are written here by et-mode at each launch.
+# Audio devices are NOT set here — JS8Call-improved enumerates them
+# at first Settings > Audio open (Qt 6.9 FFmpeg backend, PipeWire required).
+
+[General]
+MyCall=
+MyGrid=
+
+[Configuration]
+# CAT via Hamlib NET rigctl (model 2) pointing at rigctld on localhost:4532.
+# et-mode rewrites these fields when a radio is selected.
+Rig=Hamlib NET rigctl
+CATNetworkPort=4532
+CATNetworkServer=127.0.0.1
+PTTMethod=CAT
+SplitMode=None
+
+[Audio]
+# Leave blank — JS8Call-improved will enumerate PipeWire devices on first
+# Settings > Audio open. et-mode will update these at runtime.
+SoundInName=
+SoundOutName=

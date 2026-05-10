@@ -1,0 +1,16 @@
+[General]
+MyCall={{ wsjtx_callsign }}
+MyGrid={{ wsjtx_gridsquare }}
+
+[Rig]
+# CAT points at rigctld via Hamlib NET rigctl (model 2)
+# et-mode rewrites RigName and CATNetworkPort at launch time
+RigName=Hamlib NET rigctl
+CATNetworkPort=4532
+CATNetworkServer=127.0.0.1
+PTTMethod=2
+
+[Audio]
+# Rewritten by et-mode at launch based on detected radio audio card
+SoundInName=
+SoundOutName=

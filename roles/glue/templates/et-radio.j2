@@ -1,0 +1,130 @@
+#!/bin/bash
+# et-radio — select radio, detect USB port, write state
+# Managed by hamradio-mint-setup (roles/glue)
+
+STATE={{ hamradio_etc_dir }}/state
+
+# ── Radio database ──────────────────────────────────────────────────────────
+# Format: "Display Name|hamlib_model|default_baud|notes"
+# hamlib model numbers: rigctl -l to list all
+RADIOS=(
+  "Yaesu FT-817ND (DigiRig)|120|9600|DigiRig Mobile required"
+  "Yaesu FT-818ND (DigiRig)|120|9600|DigiRig Mobile required"
+  "Yaesu FT-857D (DigiRig)|122|9600|DigiRig Mobile required"
+  "Yaesu FT-897D (DigiRig)|122|9600|DigiRig Mobile required"
+  "Yaesu FT-991A (USB)|1035|38400|Connect via USB cable"
+  "Yaesu FT-891 (DigiRig DR-891)|1035|38400|DigiRig DR-891 required"
+  "Icom IC-705 (USB)|3085|115200|Connect via USB cable"
+  "Icom IC-7100 (USB)|3070|9600|Connect via USB cable"
+  "Icom IC-7200 (USB)|3075|9600|Connect via USB cable"
+  "Icom IC-7300 (USB)|3073|115200|Connect via USB cable"
+  "Elecraft KX2 (DigiRig)|2047|38400|DigiRig + Elecraft KX cables"
+  "QRP Labs QMX (USB)|2047|115200|JS8Call only, HF only"
+  "Lab599 TX-500MP (DigiRig)|2047|57600|DigiRig TX500 config required"
+  "Xiegu G90 (DigiRig)|2047|19200|DigiRig + Xiegu G90 cables"
+  "BG2FX FX-4CR|2047|115200|"
+  "(tr)uSDX (truSDX driver)|2|115200|Uses truSDX service — CAT via /tmp/trusdx_cat"
+  "Dumb Radio (DigiRig — audio only)|1|9600|No CAT control; set freq/mode on radio"
+)
+
+# ── Display menu ────────────────────────────────────────────────────────────
+echo ""
+echo "=== et-radio: Radio Selection ==="
+echo ""
+i=1
+for entry in "${RADIOS[@]}"; do
+  NAME=$(echo "$entry" | cut -d'|' -f1)
+  printf "  %2d) %s\n" $i "$NAME"
+  ((i++))
+done
+echo ""
+read -p "Select radio number: " SEL
+
+if ! [[ "$SEL" =~ ^[0-9]+$ ]] || [ "$SEL" -lt 1 ] || [ "$SEL" -gt "${#RADIOS[@]}" ]; then
+  echo "Invalid selection."
+  exit 1
+fi
+
+ENTRY="${RADIOS[$((SEL-1))]}"
+RADIO_NAME=$(echo "$ENTRY" | cut -d'|' -f1)
+RADIO_MODEL=$(echo "$ENTRY" | cut -d'|' -f2)
+RADIO_BAUD=$(echo "$ENTRY" | cut -d'|' -f3)
+RADIO_NOTES=$(echo "$ENTRY" | cut -d'|' -f4)
+
+echo ""
+echo "Selected: $RADIO_NAME"
+[ -n "$RADIO_NOTES" ] && echo "Notes: $RADIO_NOTES"
+echo ""
+
+# ── Detect USB serial port ───────────────────────────────────────────────────
+# Special case: (tr)uSDX uses virtual port from trusdx service
+if echo "$RADIO_NAME" | grep -qi "trusdx"; then
+  RADIO_PORT="/tmp/trusdx_cat"
+  echo "Using truSDX virtual CAT port: $RADIO_PORT"
+  sudo systemctl start trusdx 2>/dev/null && echo "truSDX service started." || true
+else
+  echo "Detecting USB serial ports..."
+  PORTS=($(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null))
+  if [ "${#PORTS[@]}" -eq 0 ]; then
+    echo "No USB serial ports found. Is the radio plugged in?"
+    echo "You can set the port manually or plug in the radio and re-run et-radio."
+    read -p "Enter port manually (e.g. /dev/ttyUSB0) or press Enter to skip: " MANUAL_PORT
+    RADIO_PORT="${MANUAL_PORT:-none}"
+  elif [ "${#PORTS[@]}" -eq 1 ]; then
+    RADIO_PORT="${PORTS[0]}"
+    echo "Auto-detected port: $RADIO_PORT"
+  else
+    echo "Multiple ports found:"
+    j=1
+    for p in "${PORTS[@]}"; do
+      printf "  %d) %s\n" $j "$p"
+      ((j++))
+    done
+    read -p "Select port number: " PSEL
+    RADIO_PORT="${PORTS[$((PSEL-1))]}"
+  fi
+fi
+
+# ── Detect audio card ────────────────────────────────────────────────────────
+echo ""
+echo "Detecting audio devices..."
+AUDIO_CARDS=($(aplay -l 2>/dev/null | grep "^card" | awk '{print $2}' | tr -d ':'))
+if [ "${#AUDIO_CARDS[@]}" -gt 0 ]; then
+  echo "Available ALSA playback cards:"
+  aplay -l 2>/dev/null | grep "^card"
+  read -p "Enter audio card number for radio (leave blank for ALSA Loopback): " AUDIO_SEL
+  if [ -z "$AUDIO_SEL" ]; then
+    RADIO_AUDIO="hw:Loopback,0"
+    RADIO_AUDIO_CAPTURE="hw:Loopback,1"
+  else
+    RADIO_AUDIO="hw:${AUDIO_SEL},0"
+    RADIO_AUDIO_CAPTURE="hw:${AUDIO_SEL},0"
+  fi
+else
+  RADIO_AUDIO="hw:Loopback,0"
+  RADIO_AUDIO_CAPTURE="hw:Loopback,1"
+fi
+
+# ── Write state ───────────────────────────────────────────────────────────────
+sudo tee -a /dev/null <<EOF  # validate sudo
+EOF
+sudo sed -i "s|^RADIO=.*|RADIO=${RADIO_NAME}|"               $STATE
+sudo sed -i "s|^RADIO_PORT=.*|RADIO_PORT=${RADIO_PORT}|"     $STATE
+sudo sed -i "s|^RADIO_MODEL=.*|RADIO_MODEL=${RADIO_MODEL}|" $STATE  2>/dev/null \
+  || echo "RADIO_MODEL=${RADIO_MODEL}" | sudo tee -a $STATE
+sudo sed -i "s|^RADIO_BAUD=.*|RADIO_BAUD=${RADIO_BAUD}|"   $STATE  2>/dev/null \
+  || echo "RADIO_BAUD=${RADIO_BAUD}" | sudo tee -a $STATE
+sudo sed -i "s|^RADIO_AUDIO=.*|RADIO_AUDIO=${RADIO_AUDIO}|" $STATE  2>/dev/null \
+  || echo "RADIO_AUDIO=${RADIO_AUDIO}" | sudo tee -a $STATE
+sudo sed -i "s|^RADIO_AUDIO_CAPTURE=.*|RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}|" $STATE 2>/dev/null \
+  || echo "RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}" | sudo tee -a $STATE
+
+# Start rigctld for non-truSDX, non-dumb radios
+if [ "$RADIO_MODEL" != "1" ] && ! echo "$RADIO_NAME" | grep -qi "trusdx"; then
+  sudo systemctl stop "rigctld@*" 2>/dev/null || true
+  sudo systemctl start "rigctld@${RADIO_MODEL}" && echo "CAT control started (rigctld)." || \
+    echo "Warning: rigctld failed to start. Check radio connection."
+fi
+
+echo ""
+echo "Radio set. Run 'et-info' to confirm, then 'et-mode' to start operating."

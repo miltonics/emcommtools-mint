@@ -1,0 +1,18 @@
+---
+# roles/chattervox/tasks/main.yml
+# Chattervox: AX.25 packet chat with digital signatures
+
+- name: Install Node.js (required for chattervox npm install)
+  ansible.builtin.apt:
+    name:
+      - nodejs
+      - npm
+    state: present
+  tags: [chattervox]
+
+- name: Install chattervox globally via npm
+  community.general.npm:
+    name: chattervox
+    global: true
+    state: present
+  tags: [chattervox]

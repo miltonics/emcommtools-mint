@@ -1,0 +1,55 @@
+---
+# roles/yaac/tasks/main.yml
+# YAAC: Yet Another APRS Client (Java-based)
+
+- name: Install Java runtime (YAAC requirement)
+  ansible.builtin.apt:
+    name:
+      - default-jre
+    state: present
+  tags: [yaac]
+
+- name: Create YAAC directory
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/YAAC"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [yaac]
+
+- name: Check if YAAC jar exists
+  ansible.builtin.stat:
+    path: "{{ radio_user_home }}/YAAC/YAAC.jar"
+  register: yaac_stat
+  tags: [yaac]
+
+- name: Download YAAC jar
+  ansible.builtin.get_url:
+    url: "https://www.ka2ddo.org/ka2ddo/YAAC.zip"
+    dest: /tmp/YAAC.zip
+    mode: "0644"
+  when: not yaac_stat.stat.exists
+  tags: [yaac]
+
+- name: Extract YAAC
+  ansible.builtin.unarchive:
+    src: /tmp/YAAC.zip
+    dest: "{{ radio_user_home }}/YAAC"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    remote_src: true
+  when: not yaac_stat.stat.exists
+  tags: [yaac]
+
+- name: Install YAAC launcher script
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/yaac"
+    content: |
+      #!/bin/bash
+      cd {{ radio_user_home }}/YAAC
+      exec java -jar YAAC.jar "$@"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [yaac]

@@ -1,0 +1,139 @@
+---
+# roles/js8call/tasks/main.yml
+# Installs JS8Call-improved — the current active development fork of JS8Call.
+# https://github.com/JS8Call-improved/JS8Call-improved
+#
+# Two install methods (set js8call_install_method in group_vars/all.yml):
+#
+#   "appimage"  — Downloads the prebuilt Linux AppImage. Fast (~2 min).
+#                 Note: JS8Call-improved uses Qt 6.9 + PipeWire/PulseAudio.
+#                 ALSA direct is NOT supported. PipeWire (default on Mint 22)
+#                 works correctly.
+#
+#   "build"     — Runs the upstream Debian build script, compiles from source.
+#                 Takes 15-20 min but fixes dark-mode theming issues and is
+#                 the recommended approach if AppImage has visual glitches.
+#                 Explicitly tested on Mint 22 by upstream.
+
+- name: Install FUSE (required to run AppImage)
+  ansible.builtin.apt:
+    name: libfuse2
+    state: present
+  when: js8call_install_method == "appimage"
+  tags: [js8call]
+
+- name: Install JS8Call-improved build dependencies (needed for build method)
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - cmake
+      - git
+      - libboost-all-dev
+      - libfftw3-dev
+      - libgfortran5
+      - libudev-dev
+      - libusb-1.0-0-dev
+      - libhamlib-dev
+    state: present
+  when: js8call_install_method == "build"
+  tags: [js8call]
+
+# ── AppImage method ──────────────────────────────────────────────────────────
+
+- name: Check if JS8Call-improved already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/js8call
+  register: js8call_bin
+  tags: [js8call]
+
+- name: Get latest JS8Call-improved release info (AppImage)
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/JS8Call-improved/JS8Call-improved/releases/latest
+    return_content: true
+    headers:
+      Accept: "application/vnd.github.v3+json"
+  register: js8call_release
+  when:
+    - js8call_install_method == "appimage"
+    - not js8call_bin.stat.exists
+  tags: [js8call]
+
+- name: Set JS8Call-improved AppImage download URL
+  ansible.builtin.set_fact:
+    js8call_appimage_url: >-
+      {{ js8call_release.json.assets
+         | selectattr('name', 'match', '.*x86_64\\.AppImage$')
+         | map(attribute='browser_download_url')
+         | first }}
+  when:
+    - js8call_install_method == "appimage"
+    - not js8call_bin.stat.exists
+  tags: [js8call]
+
+- name: Download JS8Call-improved AppImage
+  ansible.builtin.get_url:
+    url: "{{ js8call_appimage_url }}"
+    dest: /usr/local/bin/js8call
+    mode: "0755"
+    owner: root
+    group: root
+  when:
+    - js8call_install_method == "appimage"
+    - not js8call_bin.stat.exists
+  tags: [js8call]
+
+# ── Build-from-source method ─────────────────────────────────────────────────
+
+- name: Clone JS8Call-improved source (build method)
+  ansible.builtin.git:
+    repo: "https://github.com/JS8Call-improved/JS8Call-improved.git"
+    dest: "{{ radio_user_home }}/js8call-improved-src"
+    version: master
+    depth: 1
+  become: true
+  become_user: "{{ radio_user }}"
+  when: js8call_install_method == "build"
+  tags: [js8call]
+
+- name: Run JS8Call-improved Debian build script (15-20 min)
+  ansible.builtin.command:
+    cmd: bash tools/build-debian.sh
+    chdir: "{{ radio_user_home }}/js8call-improved-src"
+    creates: "{{ radio_user_home }}/js8call-improved-src/build/js8call"
+  become: true
+  become_user: "{{ radio_user }}"
+  when: js8call_install_method == "build"
+  tags: [js8call]
+
+- name: Symlink built js8call to PATH (build method)
+  ansible.builtin.file:
+    src: "{{ radio_user_home }}/js8call-improved-src/build/js8call"
+    dest: /usr/local/bin/js8call
+    state: link
+    force: true
+  when: js8call_install_method == "build"
+  tags: [js8call]
+
+# ── Config ────────────────────────────────────────────────────────────────────
+# JS8Call-improved uses ~/.config/JS8Call.ini (flat file, not subdirectory)
+
+- name: Write JS8Call-improved baseline config
+  ansible.builtin.template:
+    src: JS8Call.ini.j2
+    dest: "{{ radio_user_home }}/.config/JS8Call.ini"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    force: false
+  tags: [js8call]
+
+- name: Note about JS8Call-improved audio
+  ansible.builtin.debug:
+    msg: >
+      JS8Call-improved uses Qt 6.9 with the FFmpeg audio backend.
+      It requires PipeWire or PulseAudio — ALSA direct is NOT supported.
+      On Mint 22 with PipeWire (default), this works correctly.
+      Audio devices are NOT enumerated until you open Settings > Audio
+      for the first time, so the first launch may appear to have no audio
+      options until you open that dialog.
+  tags: [js8call]

@@ -1,0 +1,47 @@
+---
+# roles/sdrpp/tasks/main.yml
+
+- name: Install RTL-SDR kernel driver blacklist (prevent kernel grabbing device)
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/rtl-sdr-blacklist.conf
+    content: |
+      blacklist dvb_usb_rtl28xxu
+      blacklist rtl2832
+      blacklist rtl2830
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [sdrpp]
+
+- name: Install SDR++ dependencies
+  ansible.builtin.apt:
+    name:
+      - librtlsdr-dev
+      - rtl-sdr
+      - libfftw3-dev
+    state: present
+  tags: [sdrpp]
+
+- name: Add SDR++ PPA
+  ansible.builtin.apt_repository:
+    repo: "ppa:starjonah/sdrpp"
+    state: present
+  when: sdrpp_install_method == "ppa"
+  tags: [sdrpp]
+
+- name: Install SDR++ from PPA
+  ansible.builtin.apt:
+    name: sdrpp
+    state: present
+    update_cache: true
+  when: sdrpp_install_method == "ppa"
+  tags: [sdrpp]
+
+- name: Note about SDR++ build method
+  ansible.builtin.debug:
+    msg: >
+      sdrpp_install_method is set to 'build'. Manual build steps are
+      documented in docs/BUILDING_SDRPP.md. Set sdrpp_install_method: ppa
+      in group_vars/all.yml to use the PPA instead.
+  when: sdrpp_install_method == "build"
+  tags: [sdrpp]

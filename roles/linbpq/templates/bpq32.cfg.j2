@@ -1,0 +1,46 @@
+; bpq32.cfg — managed by hamradio-mint-setup
+; Minimal single-port KISS packet node
+
+SIMPLE
+
+PORT
+  PORTNUM=1
+  ID=VHF Packet
+  TYPE=KISS
+  PROTOCOL=AGWPE
+  AGWPORT=8000
+  QUALITY=192
+  FREQUENCY=144390000
+  BAUD=1200
+ENDPORT
+
+NODE
+  NODECALL={{ linbpq_callsign }}-{{ linbpq_ssid }}
+  NODEALIAS={{ linbpq_callsign | regex_replace('[^A-Z0-9]', '') | truncate(6, True, '') }}
+  LOCATION={{ operator_gridsquare }}
+  SYSOP={{ linbpq_sysop }}
+  HFCALL={{ linbpq_callsign }}
+  MINQUAL=10
+  NODESINTERVAL=30
+  IDINTERVAL=10
+  BTINTERVAL=0
+ENDNODE
+
+BBS
+  BBSCALL={{ linbpq_callsign }}-7
+  BBSALIAS=WLNK-1
+  SYSOP={{ linbpq_sysop }}
+  WINLINKRPC=1
+  MaxMsg=500
+  MaxAge=30
+ENDBBS
+
+TELNET
+  LOGGING=1
+  PORT=8023
+  LOGINPROMPT=user:
+  PWPROMPT=password:
+  MAXSESSIONS=10
+ENDTELNET
+
+HTTPPORT=8012

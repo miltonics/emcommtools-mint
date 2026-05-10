@@ -1,0 +1,22 @@
+{
+  "mycall": "{{ pat_callsign }}",
+  "secure_login_password": "{{ pat_winlink_password }}",
+  "auxiliary_addresses": [],
+  "locator": "{{ pat_gridsquare }}",
+  "service_codes": ["PUBLIC"],
+  "http_addr": "localhost:8080",
+  "motd": ["hamradio-mint-setup"],
+  "connect_aliases": {
+    "ax25": "ax25://{{ pat_callsign }}",
+    "ardop": "ardop://{{ pat_callsign }}"
+  },
+  "listen": ["ax25", "ardop"],
+  "ardop": {
+    "addr": "localhost:8515",
+    "arq_bandwidth": { "Forced": false, "Max": 2000 }
+  },
+  "ax25": {
+    "port": "wl2k",
+    "rig": ""
+  }
+}

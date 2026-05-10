@@ -1,0 +1,72 @@
+---
+# roles/pat/tasks/main.yml
+# Pat is the open-source Winlink client. Installs from the official release.
+
+- name: Check if pat already installed
+  ansible.builtin.command: which pat
+  register: pat_check
+  failed_when: false
+  changed_when: false
+  tags: [pat]
+
+- name: Get latest Pat release info
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/la5nta/pat/releases/latest
+    return_content: true
+  register: pat_release
+  when: pat_check.rc != 0
+  tags: [pat]
+
+- name: Set Pat download URL
+  ansible.builtin.set_fact:
+    pat_deb_url: >-
+      {{ pat_release.json.assets
+         | selectattr('name', 'match', '.*amd64\\.deb$')
+         | map(attribute='browser_download_url')
+         | first }}
+  when: pat_check.rc != 0
+  tags: [pat]
+
+- name: Download Pat deb
+  ansible.builtin.get_url:
+    url: "{{ pat_deb_url }}"
+    dest: /tmp/pat.deb
+    mode: "0644"
+  when: pat_check.rc != 0
+  tags: [pat]
+
+- name: Install Pat deb
+  ansible.builtin.apt:
+    deb: /tmp/pat.deb
+    state: present
+  when: pat_check.rc != 0
+  tags: [pat]
+
+- name: Create Pat config directory for user
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/.config/pat"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [pat]
+
+- name: Write Pat config.json
+  ansible.builtin.template:
+    src: pat-config.json.j2
+    dest: "{{ radio_user_home }}/.config/pat/config.json"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0600"
+    force: false
+  tags: [pat]
+
+- name: Initialize Pat (creates default mailbox structure)
+  ansible.builtin.command:
+    cmd: "pat --config {{ radio_user_home }}/.config/pat/config.json env"
+  become: true
+  become_user: "{{ radio_user }}"
+  register: pat_init
+  changed_when: false
+  failed_when: false
+  tags: [pat]
