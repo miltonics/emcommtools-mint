@@ -71,6 +71,14 @@
   when: audio_alsa_loopback | bool
   tags: [audio]
 
+- name: Ensure PipeWire config dir exists
+  ansible.builtin.file:
+    path: /etc/pipewire/pipewire.conf.d
+    state: directory
+    mode: "0755"
+  when: audio_use_pipewire_virtuals | bool
+  tags: [audio]
+
 - name: Create PipeWire virtual radio sink/source
   ansible.builtin.copy:
     dest: /etc/pipewire/pipewire.conf.d/10-hamradio-virtual.conf
