@@ -1,8 +1,5 @@
 ---
 # roles/ardop/tasks/main.yml
-# ardopc: HF soundcard modem for Winlink over HF.
-# ETC patched the kernel for ARDOP on 22.10; on Mint 22 (6.x kernel) this
-# is generally not needed, but we note any issues in docs/ARDOP_NOTES.md.
 
 - name: Install ARDOP audio dependencies
   ansible.builtin.apt:
@@ -12,22 +9,40 @@
     state: present
   tags: [ardop]
 
-- name: Check if ardopc binary already installed
+- name: Check if ardopcf binary already installed
   ansible.builtin.stat:
     path: /usr/local/bin/ardopc
   register: ardopc_stat
   tags: [ardop]
 
-- name: Download ardopc binary (WB2OSZ build)
+- name: Get latest ardopcf release info
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/pflarue/ardop/releases/latest
+    return_content: true
+    headers:
+      Accept: "application/vnd.github.v3+json"
+  register: ardopcf_release
+  when: not ardopc_stat.stat.exists
+  tags: [ardop]
+
+- name: Set ardopcf download URL
+  ansible.builtin.set_fact:
+    ardopcf_url: >-
+      {{ ardopcf_release.json.assets
+         | selectattr('name', 'match', '.*amd64_Linux.*')
+         | map(attribute='browser_download_url')
+         | first }}
+  when: not ardopc_stat.stat.exists
+  tags: [ardop]
+
+- name: Download ardopcf binary
   ansible.builtin.get_url:
-    url: "{{ ardop_binary_url }}"
+    url: "{{ ardopcf_url }}"
     dest: /usr/local/bin/ardopc
     mode: "0755"
     owner: root
     group: root
-  when:
-    - ardop_install_method == "binary"
-    - not ardopc_stat.stat.exists
+  when: not ardopc_stat.stat.exists
   tags: [ardop]
 
 - name: Install ardopc systemd service
@@ -35,14 +50,14 @@
     dest: /etc/systemd/system/ardopc.service
     content: |
       [Unit]
-      Description=ARDOP HF modem (ardopc)
+      Description=ARDOP HF modem (ardopcf)
       After=sound.target
 
       [Service]
       Type=simple
       User={{ radio_user }}
       EnvironmentFile={{ hamradio_etc_dir }}/state
-      ExecStart=/usr/local/bin/ardopc 8515 ${RADIO_AUDIO_CAPTURE} ${RADIO_AUDIO_PLAY}
+      ExecStart=/usr/local/bin/ardopc 8515 ${RADIO_AUDIO_CAPTURE} ${RADIO_AUDIO}
       Restart=on-failure
       RestartSec=5
 
@@ -54,22 +69,14 @@
   notify: Reload systemd
   tags: [ardop]
 
-- name: Write ARDOP kernel tuning notes
+- name: Write ARDOP notes
   ansible.builtin.copy:
     dest: "{{ hamradio_lib_dir }}/ARDOP_NOTES.md"
     content: |
-      # ARDOP Kernel Notes
-
-      EmComm Tools OS patched the Ubuntu 22.10 kernel for ARDOP latency issues.
-      Linux Mint 22 ships with kernel 6.8+, which generally does not need these
-      patches. If you experience ARDOP audio underruns, try:
-
+      # ARDOP Notes
+      Using ardopcf (pflarue/ardop fork) — includes improvements over original ardopc.
+      If you experience audio underruns try:
         echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-hamradio.conf
         sudo sysctl -p /etc/sysctl.d/99-hamradio.conf
-
-      You can also try setting the process priority:
-        sudo renice -n -10 $(pgrep ardopc)
-
-      See: https://github.com/wb2osz/ardop for the latest ardopc source.
     force: false
   tags: [ardop]
