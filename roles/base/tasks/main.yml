@@ -5,7 +5,7 @@
 - name: Detect Linux Mint / Ubuntu base
   ansible.builtin.assert:
     that:
-      - ansible_distribution in ["Linuxmint", "Ubuntu"]
+      - ansible_facts["distribution"] in ["Linux Mint", "Ubuntu", "Linuxmint"]
     fail_msg: >
       This playbook targets Linux Mint or Ubuntu.
       Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}
