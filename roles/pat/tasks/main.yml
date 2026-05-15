@@ -21,7 +21,7 @@
   ansible.builtin.set_fact:
     pat_deb_url: >-
       {{ pat_release.json.assets
-         | selectattr('name', 'match', '.*amd64\\.deb$')
+         | selectattr('name', 'match', '.*amd64\.deb$')
          | map(attribute='browser_download_url')
          | first }}
   when: pat_check.rc != 0
