@@ -27,7 +27,7 @@
 
 - name: Download LinBPQ binary
   ansible.builtin.get_url:
-    url: "http://www.cantab.net/users/john.wiseman/Downloads/Latest/linbpq"
+    url: "http://www.cantab.net/users/john.wiseman/Downloads/linbpq"
     dest: "{{ radio_user_home }}/linbpq/linbpq"
     owner: "{{ radio_user }}"
     group: "{{ radio_user }}"
