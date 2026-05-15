@@ -62,7 +62,7 @@
   ansible.builtin.set_fact:
     js8call_appimage_url: >-
       {{ js8call_release.json.assets
-         | selectattr('name', 'match', '.*x86_64\\.AppImage$')
+         | selectattr('name', 'match', '.*x86_64\.AppImage$')
          | map(attribute='browser_download_url')
          | first }}
   when:
