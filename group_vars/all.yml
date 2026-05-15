@@ -80,3 +80,9 @@ gps_chrony_enable: true
 # Set your US state abbreviation for Navit offline map, or leave empty to skip.
 # Example: "WA", "TX", "FL"
 offline_map_state: ""
+
+# --- Pat / Winlink ---
+# Placeholders — et-user will overwrite these at runtime via /etc/hamradio/state
+pat_callsign: "N0CALL"
+pat_winlink_password: ""
+pat_gridsquare: "AA00aa"
