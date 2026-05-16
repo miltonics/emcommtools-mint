@@ -1,21 +1,48 @@
 ---
 # roles/voacap/tasks/main.yml
-# voacapl: Linux port of VOACAP HF propagation prediction engine
-# pythonprop: GUI wrapper (voacapgui command)
-- name: Install voacapl and pythonprop dependencies
+# voacapl: built from source - not available as apt package on Mint 22
+# Source: https://github.com/jawatson/voacapl
+- name: Install voacapl build dependencies
   ansible.builtin.apt:
     name:
-      - voacapl
+      - gfortran
+      - automake
+      - autoconf
       - python3-matplotlib
       - python3-cartopy
       - python3-scipy
     state: present
   tags: [voacap]
 
-- name: Note about VOACAP GUI
-  ansible.builtin.debug:
-    msg: >
-      VOACAP installed as voacapl (command line) with python3 dependencies.
-      For the GUI, install pythonprop from https://github.com/jawatson/pythonprop
-      and run 'voacapgui' from the terminal.
+- name: Check if voacapl already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/voacapl
+  register: voacapl_bin
+  tags: [voacap]
+
+- name: Clone voacapl source
+  ansible.builtin.git:
+    repo: https://github.com/jawatson/voacapl.git
+    dest: /tmp/voacapl-src
+    depth: 1
+  when: not voacapl_bin.stat.exists
+  tags: [voacap]
+
+- name: Build and install voacapl
+  ansible.builtin.shell: |
+    cd /tmp/voacapl-src
+    autoreconf --install
+    ./configure
+    make
+    make install
+  args:
+    creates: /usr/local/bin/voacapl
+  tags: [voacap]
+
+- name: Run makeitshfbc for radio user
+  ansible.builtin.command:
+    cmd: makeitshfbc
+    creates: "{{ radio_user_home }}/itshfbc"
+  become: true
+  become_user: "{{ radio_user }}"
   tags: [voacap]
