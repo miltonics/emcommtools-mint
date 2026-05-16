@@ -15,4 +15,5 @@
     name: chattervox
     global: true
     state: present
+  ignore_errors: true
   tags: [chattervox]
