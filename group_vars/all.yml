@@ -86,3 +86,13 @@ offline_map_state: ""
 pat_callsign: "N0CALL"
 pat_winlink_password: ""
 pat_gridsquare: "AA00aa"
+
+# --- LinBPQ ---
+# Placeholders — et-user will overwrite these at runtime via /etc/hamradio/state
+linbpq_callsign: "N0CALL"
+linbpq_node_alias: "NODE"
+linbpq_sysop: "N0CALL"
+
+# --- LinBPQ placeholders (et-user overwrites at runtime) ---
+operator_gridsquare: "AA00aa"
+
