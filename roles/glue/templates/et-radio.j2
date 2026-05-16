@@ -4,6 +4,8 @@
 
 STATE={{ hamradio_etc_dir }}/state
 
+{% raw %}
+
 # ── Radio database ──────────────────────────────────────────────────────────
 # Format: "Display Name|hamlib_model|default_baud|notes"
 # hamlib model numbers: rigctl -l to list all
@@ -128,3 +130,5 @@ fi
 
 echo ""
 echo "Radio set. Run 'et-info' to confirm, then 'et-mode' to start operating."
+
+{% endraw %}
