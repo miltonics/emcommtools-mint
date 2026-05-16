@@ -22,19 +22,30 @@
     state: present
   tags: [sdrpp]
 
-- name: Add SDR++ PPA
-  ansible.builtin.apt_repository:
-    repo: "ppa:starjonah/sdrpp"
-    state: present
+- name: Check if SDR++ already installed
+  ansible.builtin.stat:
+    path: /usr/bin/sdrpp
+  register: sdrpp_bin
   when: sdrpp_install_method == "ppa"
   tags: [sdrpp]
 
-- name: Install SDR++ from PPA
+- name: Download SDR++ deb (Ubuntu Noble / Mint 22)
+  ansible.builtin.get_url:
+    url: "https://github.com/AlexandreRouma/SDRPlusPlus/releases/latest/download/sdrpp_ubuntu_noble_amd64.deb"
+    dest: /tmp/sdrpp.deb
+    mode: "0644"
+  when:
+    - sdrpp_install_method == "ppa"
+    - not sdrpp_bin.stat.exists
+  tags: [sdrpp]
+
+- name: Install SDR++ deb
   ansible.builtin.apt:
-    name: sdrpp
+    deb: /tmp/sdrpp.deb
     state: present
-    update_cache: true
-  when: sdrpp_install_method == "ppa"
+  when:
+    - sdrpp_install_method == "ppa"
+    - not sdrpp_bin.stat.exists
   tags: [sdrpp]
 
 - name: Note about SDR++ build method
