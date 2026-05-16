@@ -31,7 +31,7 @@
   ansible.builtin.set_fact:
     paracon_pyz_url: >-
       {{ paracon_release.json.assets
-         | selectattr('name', 'match', '.*\\.pyz$')
+         | selectattr('name', 'search', '\.pyz$')
          | map(attribute='browser_download_url')
          | first }}
   when: not paracon_stat.stat.exists
