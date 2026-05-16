@@ -4,6 +4,7 @@
 # Mirrors ETC's mode switcher: stops all et-services, rewrites configs, starts the mode.
 
 STATE={{ hamradio_etc_dir }}/state
+{% raw %}
 source $STATE
 
 # ── Preflight checks ─────────────────────────────────────────────────────────
@@ -158,3 +159,4 @@ esac
 echo ""
 echo "Mode: $MODE_NAME — started."
 echo "Run 'et-info' to see system status."
+{% endraw %}
