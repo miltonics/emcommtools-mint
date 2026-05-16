@@ -106,7 +106,7 @@ else
 fi
 
 # ── Write state ───────────────────────────────────────────────────────────────
-sudo tee -a /dev/null <<EOF  # validate sudo
+sudo tee -a /dev/null <<EOF
 EOF
 sudo sed -i "s|^RADIO=.*|RADIO=${RADIO_NAME}|"               $STATE
 sudo sed -i "s|^RADIO_PORT=.*|RADIO_PORT=${RADIO_PORT}|"     $STATE
