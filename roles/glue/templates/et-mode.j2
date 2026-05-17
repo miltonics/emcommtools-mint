@@ -77,9 +77,9 @@ patch_audio_ini() {
 case "$SEL" in
 
   1) # JS8Call
-    patch_audio_ini "${HOME}/.config/JS8Call/JS8Call.ini"
-    sed -i "s|^MyCall=.*|MyCall=${CALLSIGN}|"   "${HOME}/.config/JS8Call/JS8Call.ini"
-    sed -i "s|^MyGrid=.*|MyGrid=${GRIDSQUARE}|" "${HOME}/.config/JS8Call/JS8Call.ini"
+    patch_audio_ini "${HOME}/.config/JS8Call.ini"
+    sed -i "s|^MyCall=.*|MyCall=${CALLSIGN}|"   "${HOME}/.config/JS8Call.ini"
+    sed -i "s|^MyGrid=.*|MyGrid=${GRIDSQUARE}|" "${HOME}/.config/JS8Call.ini"
     echo "Starting JS8Call..."
     nohup js8call >/dev/null 2>&1 &
     ;;
