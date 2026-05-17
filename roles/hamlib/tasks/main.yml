@@ -10,22 +10,9 @@
   tags: [hamlib]
 
 - name: Install rigctld systemd service template
-  ansible.builtin.copy:
+  ansible.builtin.template:
+    src: rigctld@.service.j2
     dest: /etc/systemd/system/rigctld@.service
-    content: |
-      # rigctld@.service — parameterised rigctld instance
-      [Unit]
-      Description=Hamlib rig control daemon (model %i)
-      After=network.target
-      [Service]
-      Type=simple
-      EnvironmentFile=/etc/hamradio/rigctld.env
-      ExecStart=/bin/bash -c "/usr/bin/rigctld --model=%i --rig-file=$RADIO_PORT --serial-speed=$RADIO_BAUD --listen-addr=127.0.0.1 --port=4532"
-      Restart=on-failure
-      RestartSec=3
-      User={{ radio_user }}
-      [Install]
-      WantedBy=multi-user.target
     owner: root
     group: root
     mode: "0644"
