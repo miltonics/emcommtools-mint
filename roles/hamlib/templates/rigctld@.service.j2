@@ -4,8 +4,7 @@ Description=Hamlib rig control daemon (model %i)
 After=network.target
 [Service]
 Type=simple
-EnvironmentFile=/etc/hamradio/rigctld.env
-ExecStart=/bin/bash -c "/usr/bin/rigctld --model=%i --rig-file=$RADIO_PORT --serial-speed=$RADIO_BAUD --listen-addr=127.0.0.1 --port=4532"
+ExecStart=/usr/local/bin/start-rigctld %i
 Restart=on-failure
 RestartSec=3
 User={{ radio_user }}
