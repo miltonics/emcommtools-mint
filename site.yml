@@ -86,3 +86,7 @@
     # --- Glue: et-* commands, udev rules, systemd services ---
     - role: glue
       tags: [glue]
+
+    # --- Desktop status widget ---
+    - role: conky
+      tags: [conky]

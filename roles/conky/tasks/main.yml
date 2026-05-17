@@ -1,0 +1,60 @@
+---
+# roles/conky/tasks/main.yml
+# Installs the hamradio status widget for Cinnamon desktop
+- name: Install Conky
+  ansible.builtin.apt:
+    name: conky-all
+    state: present
+  tags: [conky]
+
+- name: Create Conky config directory for user
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/.config/conky"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [conky]
+
+- name: Install hamradio Conky config
+  ansible.builtin.copy:
+    src: hamradio.conf
+    dest: "{{ radio_user_home }}/.config/conky/hamradio.conf"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    force: false
+  tags: [conky]
+
+- name: Install Conky autostart entry
+  ansible.builtin.copy:
+    dest: "{{ radio_user_home }}/.config/autostart/hamradio-conky.desktop"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Ham Radio Status Widget
+      Exec=conky --config={{ radio_user_home }}/.config/conky/hamradio.conf
+      Hidden=false
+      NoDisplay=false
+      X-GNOME-Autostart-enabled=true
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+  tags: [conky]
+
+- name: Create autostart directory if missing
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/.config/autostart"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [conky]
+
+- name: Note about Conky widget
+  ansible.builtin.debug:
+    msg: >
+      Ham radio status widget installed. It will start automatically on next login.
+      To start it now, run:
+      conky --config={{ radio_user_home }}/.config/conky/hamradio.conf &
+  tags: [conky]
