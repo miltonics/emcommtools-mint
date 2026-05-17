@@ -14,8 +14,8 @@ but targeting Mint instead of Ubuntu 22.10, and adding support for the
 ### 1. Fresh Mint install — first time
 
 ```bash
-git clone https://github.com/YOURNAME/hamradio-mint-setup.git
-cd hamradio-mint-setup
+git clone https://github.com/miltonics/emcommtools-mint.git
+cd emcommtools-mint
 
 # No pre-editing needed — run the bootstrap directly.
 # Your callsign, grid, and Winlink password are set interactively by et-user
@@ -30,8 +30,8 @@ Then log out and back in so group changes (dialout, audio, plugdev) take effect.
 ### 2. Re-deploying to a new machine
 
 ```bash
-git clone https://github.com/YOURNAME/hamradio-mint-setup.git
-cd hamradio-mint-setup
+git clone https://github.com/miltonics/emcommtools-mint.git
+cd emcommtools-mint
 ./bootstrap.sh
 ```
 
@@ -77,12 +77,11 @@ These are the only commands you need to operate:
 |---|---|
 | `et-user` | Set callsign, grid square, name, Winlink password |
 | `et-radio` | Select radio model, auto-detect USB port and audio card |
-| `et-mode` | Choose operating mode (JS8Call, Winlink, APRS, etc.) |
+| `et-mode` | Choose operating mode (JS8Call, WSJT-X, Winlink, APRS, etc.) |
 | `et-info` | Show current system status (callsign, radio, mode, CAT) |
 | `et-time` | Show GPS/NTP time sync status |
 | `et-audio` | List available audio devices |
 | `et-trusdx` | Start/stop/status the (tr)uSDX driver service |
-| `et-voacap` | Run VOACAP propagation prediction |
 | `et-user-backup` | Back up all ham radio configs and Winlink mail |
 | `et-user-restore` | Restore from a backup |
 
@@ -125,6 +124,12 @@ et-info        # confirm everything is connected
 |---|---|
 | (tr)uSDX / uSDX | USB (CH340/CH341), full driver via trusdx service |
 
+### VHF/UHF audio-only
+
+| Radio | Interface |
+|---|---|
+| Quansheng UV-K5 Pro | Audio interface via headphone/mic jack; use with Direwolf for APRS/packet |
+
 ### Dumb radios (audio only)
 
 Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio manually.
@@ -135,7 +140,8 @@ Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio
 
 | Mode | What runs |
 |---|---|
-| JS8Call | JS8Call (auto-configured CAT + audio) |
+| JS8Call | JS8Call (auto-configured callsign, grid, CAT + audio) |
+| WSJT-X (FT8 / FT4) | WSJT-X (auto-configured callsign, grid, CAT + audio) |
 | Fldigi | fldigi (+ flmsg, flamp) |
 | APRS Client | Direwolf TNC → YAAC |
 | BBS Client | Direwolf TNC → Paracon |
@@ -145,7 +151,6 @@ Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio
 | Packet Digipeater | Direwolf (SSID -2) |
 | Winlink VHF/UHF | Direwolf TNC → Pat |
 | Winlink HF ARDOP | ardopc modem → Pat |
-| WSJT-X | WSJT-X (manual launch) |
 
 ---
 
@@ -211,43 +216,11 @@ hamradio-mint-setup/
 | truSDX support | Dumb radio only | Full driver with CAT emulation |
 | Deployment | Cubic ISO build (hour+) | `git clone && ./bootstrap.sh` |
 | Re-deployment | Rebuild ISO | Re-run playbook |
-| GUI | Conky desktop widget | `et-info` CLI |
+| GUI | Conky desktop widget | Conky desktop widget + `et-info` CLI |
 | VARA | Experimental add-on | Same (unsupported, manual) |
 | Offline maps | Navit (US states) | Planned (see TODO) |
 
 ---
-
-## Putting This on GitHub
-
-Since you want your own version in git (so re-deployment is just a `git clone`):
-
-```bash
-# On your Mint machine after downloading the archive from this chat:
-tar -xzf hamradio-mint-setup.tar.gz
-cd hamradio-mint-setup
-
-# Initialize git and push to a new repo
-git init
-git add -A
-git commit -m "Initial ham radio Mint setup scaffold"
-
-# Create the repo on GitHub first (github.com → New repository),
-# then connect and push:
-git remote add origin https://github.com/YOURNAME/hamradio-mint-setup.git
-git branch -M main
-git push -u origin main
-```
-
-After that, re-deployment on any machine is:
-
-```bash
-git clone https://github.com/YOURNAME/hamradio-mint-setup.git
-cd hamradio-mint-setup
-./bootstrap.sh
-```
-
-**What to commit vs. what to keep private:**
-`group_vars/all.yml` contains no secrets (callsign/password are set by `et-user` at runtime, not stored in this file), so the whole repo is safe to push public. If you add sensitive values to `all.yml` later, add it to `.gitignore`.
 
 ---
 

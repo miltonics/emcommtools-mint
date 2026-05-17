@@ -20,6 +20,7 @@ fi
 # ── Mode menu ─────────────────────────────────────────────────────────────────
 MODES=(
   "JS8Call"
+  "WSJT-X (FT8 / FT4)"
   "Fldigi"
   "APRS Client (YAAC)"
   "BBS Client (Paracon)"
@@ -84,7 +85,15 @@ case "$SEL" in
     nohup js8call >/dev/null 2>&1 &
     ;;
 
-  2) # Fldigi
+  2) # WSJT-X
+    patch_audio_ini "${HOME}/.config/WSJT-X/WSJT-X.ini"
+    sed -i "s|^MyCall=.*|MyCall=${CALLSIGN}|"   "${HOME}/.config/WSJT-X/WSJT-X.ini"
+    sed -i "s|^MyGrid=.*|MyGrid=${GRIDSQUARE}|" "${HOME}/.config/WSJT-X/WSJT-X.ini"
+    echo "Starting WSJT-X..."
+    nohup wsjtx >/dev/null 2>&1 &
+    ;;
+
+  3) # Fldigi
     echo "Starting Fldigi..."
     nohup fldigi \
       --mycall "$CALLSIGN" \
@@ -93,52 +102,52 @@ case "$SEL" in
       >/dev/null 2>&1 &
     ;;
 
-  3) # APRS (YAAC)
+  4) # APRS (YAAC)
     sudo systemctl start direwolf
     sleep 2
     echo "Starting YAAC..."
     nohup yaac >/dev/null 2>&1 &
     ;;
 
-  4) # Paracon
+  5) # Paracon
     sudo systemctl start direwolf
     sleep 2
     echo "Starting Paracon..."
     nohup paracon >/dev/null 2>&1 &
     ;;
 
-  5) # QtTermTCP
+  6) # QtTermTCP
     sudo systemctl start direwolf
     sleep 2
     echo "Starting QtTermTCP..."
     nohup qttermtcp >/dev/null 2>&1 &
     ;;
 
-  6) # LinBPQ
+  7) # LinBPQ
     sudo systemctl start direwolf
     sleep 2
     sudo systemctl start linbpq
     echo "LinBPQ started. Web UI: http://localhost:8012"
     ;;
 
-  7) # Chattervox
+  8) # Chattervox
     sudo systemctl start direwolf
     sleep 2
     echo "Starting Chattervox..."
     chattervox chat --callsign "$CALLSIGN"
     ;;
 
-  8) # APRS Digipeater
+  9) # APRS Digipeater
     sudo systemctl start direwolf
     echo "APRS Digipeater started via Direwolf. SSID: ${CALLSIGN}-4"
     ;;
 
-  9) # Packet Digipeater
+  10) # Packet Digipeater
     sudo systemctl start direwolf
     echo "Packet Digipeater started via Direwolf. SSID: ${CALLSIGN}-2"
     ;;
 
-  10) # Winlink AX.25
+  11) # Winlink AX.25
     sudo systemctl start direwolf
     sleep 2
     echo "Starting Pat (Winlink AX.25)..."
@@ -146,7 +155,7 @@ case "$SEL" in
     echo "Pat web UI: http://localhost:8080"
     ;;
 
-  11) # Winlink ARDOP
+  12) # Winlink ARDOP
     sudo systemctl start ardopc
     sleep 3
     echo "Starting Pat (Winlink ARDOP)..."
