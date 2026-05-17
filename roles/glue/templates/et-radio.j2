@@ -123,6 +123,10 @@ sudo sed -i "s|^RADIO_AUDIO_CAPTURE=.*|RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE
 
 # Start rigctld for non-truSDX, non-dumb radios
 if [ "$RADIO_MODEL" != "1" ] && ! echo "$RADIO_NAME" | grep -qi "trusdx"; then
+  sudo tee /etc/hamradio/rigctld.env > /dev/null << ENVEOF
+RADIO_PORT=${RADIO_PORT}
+RADIO_BAUD=${RADIO_BAUD}
+ENVEOF
   sudo systemctl stop "rigctld@*" 2>/dev/null || true
   sudo systemctl start "rigctld@${RADIO_MODEL}" && echo "CAT control started (rigctld)." || \
     echo "Warning: rigctld failed to start. Check radio connection."
