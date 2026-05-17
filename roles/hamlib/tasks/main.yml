@@ -28,11 +28,11 @@
       [Service]
       Type=simple
       EnvironmentFile=/etc/hamradio/state
-      ExecStart=/usr/bin/rigctld \
-        --model=%i \
-        --rig-file=${RADIO_PORT} \
-        --serial-speed=${RADIO_BAUD:-9600} \
-        --listen-addr=127.0.0.1 \
+      ExecStart=/usr/bin/rigctld
+        --model=%i
+        --rig-file=$RADIO_PORT
+        --serial-speed=$RADIO_BAUD
+        --listen-addr=127.0.0.1
         --port=4532
       Restart=on-failure
       RestartSec=3
