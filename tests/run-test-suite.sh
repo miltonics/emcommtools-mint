@@ -117,7 +117,7 @@ check_config() {
 
 check_config "$RADIO_HOME/.config/JS8Call.ini"        "JS8Call"
 check_config "$RADIO_HOME/.config/WSJT-X.ini"         "WSJT-X"
-check_config "/etc/direwolf/direwolf.conf"             "Direwolf"
+check_config "/etc/hamradio/direwolf/direwolf.conf"    "Direwolf"
 check_config "$RADIO_HOME/linbpq/bpq32.cfg"           "LinBPQ"
 check_config "$RADIO_HOME/.config/pat/config.json"    "Pat"
 check_config "$RADIO_HOME/.config/paracon/paracon.ini" "Paracon"

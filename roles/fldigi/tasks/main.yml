@@ -8,6 +8,7 @@
       - flmsg
       - flamp
       - flwrap
+      - flrig
     state: present
   tags: [fldigi]
 
