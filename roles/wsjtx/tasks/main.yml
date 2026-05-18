@@ -7,7 +7,7 @@
     state: present
   tags: [wsjtx]
 
-- name: Create WSJT-X config directory for user
+- name: Create WSJT-X runtime directory (logs, aux files)
   ansible.builtin.file:
     path: "{{ radio_user_home }}/.config/WSJT-X"
     state: directory
@@ -16,10 +16,10 @@
     mode: "0755"
   tags: [wsjtx]
 
-- name: Write WSJT-X baseline config (callsign, grid, CAT)
+- name: Write WSJT-X baseline config (CAT rig pointer)
   ansible.builtin.template:
     src: WSJT-X.ini.j2
-    dest: "{{ radio_user_home }}/.config/WSJT-X/WSJT-X.ini"
+    dest: "{{ radio_user_home }}/.config/WSJT-X.ini"
     owner: "{{ radio_user }}"
     group: "{{ radio_user }}"
     mode: "0644"

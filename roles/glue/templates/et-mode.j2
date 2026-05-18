@@ -66,12 +66,25 @@ sleep 1
 # ── Write mode to state ───────────────────────────────────────────────────────
 sudo sed -i "s|^MODE=.*|MODE=\"${MODE_NAME}\"|" $STATE
 
+# ── Helper: set/add a key in an INI section ───────────────────────────────────
+set_ini_key() {
+  local file="$1" section="$2" key="$3" value="$4"
+  [ -f "$file" ] || touch "$file"
+  if grep -q "^${key}=" "$file"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  elif grep -q "^\[${section}\]" "$file"; then
+    sed -i "/^\[${section}\]/a ${key}=${value}" "$file"
+  else
+    printf '\n[%s]\n%s=%s\n' "$section" "$key" "$value" >> "$file"
+  fi
+}
+
 # ── Helper: patch audio in INI-style config files ─────────────────────────────
 patch_audio_ini() {
   local FILE="$1"
   [ -f "$FILE" ] || return
-  sed -i "s|^SoundInName=.*|SoundInName=${RADIO_AUDIO_CAPTURE}|"  "$FILE"
-  sed -i "s|^SoundOutName=.*|SoundOutName=${RADIO_AUDIO}|"         "$FILE"
+  set_ini_key "$FILE" Audio SoundInName  "$RADIO_AUDIO_CAPTURE"
+  set_ini_key "$FILE" Audio SoundOutName "$RADIO_AUDIO"
 }
 
 # ── Mode logic ────────────────────────────────────────────────────────────────
@@ -86,9 +99,14 @@ case "$SEL" in
     ;;
 
   2) # WSJT-X
-    patch_audio_ini "${HOME}/.config/WSJT-X/WSJT-X.ini"
-    sed -i "s|^MyCall=.*|MyCall=${CALLSIGN}|"   "${HOME}/.config/WSJT-X/WSJT-X.ini"
-    sed -i "s|^MyGrid=.*|MyGrid=${GRIDSQUARE}|" "${HOME}/.config/WSJT-X/WSJT-X.ini"
+    WSJTX_INI="${HOME}/.config/WSJT-X.ini"
+    set_ini_key "$WSJTX_INI" General MyCall        "$CALLSIGN"
+    set_ini_key "$WSJTX_INI" General MyGrid        "$GRIDSQUARE"
+    set_ini_key "$WSJTX_INI" Rig     RigName       "Hamlib NET rigctl"
+    set_ini_key "$WSJTX_INI" Rig     CATNetworkPort "4532"
+    set_ini_key "$WSJTX_INI" Rig     CATNetworkServer "127.0.0.1"
+    set_ini_key "$WSJTX_INI" Rig     PTTMethod     "2"
+    patch_audio_ini "$WSJTX_INI"
     echo "Starting WSJT-X..."
     nohup wsjtx >/dev/null 2>&1 &
     ;;
