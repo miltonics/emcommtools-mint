@@ -64,7 +64,7 @@ sudo systemctl stop linbpq   2>/dev/null
 sleep 1
 
 # ── Write mode to state ───────────────────────────────────────────────────────
-sudo sed -i "s|^MODE=.*|MODE=${MODE_NAME}|" $STATE
+sudo sed -i "s|^MODE=.*|MODE=\"${MODE_NAME}\"|" $STATE
 
 # ── Helper: patch audio in INI-style config files ─────────────────────────────
 patch_audio_ini() {

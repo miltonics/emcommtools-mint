@@ -44,7 +44,7 @@
     content: |
       #!/bin/bash
       source /etc/hamradio/rigctld.env
-      exec /usr/bin/rigctld --model=$1 --rig-file=$RADIO_PORT --serial-speed=$RADIO_BAUD --listen-addr=127.0.0.1 --port=4532
+      exec /usr/bin/rigctld --model=$1 --rig-file=$RADIO_PORT --serial-speed=$RADIO_BAUD --port=4532
     owner: root
     group: root
     mode: "0755"

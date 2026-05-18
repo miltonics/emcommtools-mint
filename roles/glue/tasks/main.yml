@@ -38,7 +38,7 @@
         sudo sed -i "s|^CALLSIGN=.*|CALLSIGN=${NEW_CALL}|" $STATE
       fi
       [ -n "$NEW_GRID" ]   && sudo sed -i "s|^GRIDSQUARE=.*|GRIDSQUARE=${NEW_GRID}|" $STATE
-      [ -n "$NEW_NAME" ]   && sudo sed -i "s|^OPERATOR_NAME=.*|OPERATOR_NAME=${NEW_NAME}|" $STATE
+      [ -n "$NEW_NAME" ]   && sudo sed -i "s|^OPERATOR_NAME=.*|OPERATOR_NAME=\"${NEW_NAME}\"|" $STATE
       if [ -n "$NEW_WLPASS" ]; then
         sudo sed -i "s|^WINLINK_PASSWORD=.*|WINLINK_PASSWORD=${NEW_WLPASS}|" $STATE
         # Also update Pat config if it exists

@@ -89,14 +89,16 @@ else
   warn "OPERATOR_NAME not set — run et-user"
 fi
 
-if [ -n "$RADIO" ]; then
-  pass "RADIO set: $RADIO"
+RADIO_VAL=$(grep "^RADIO=" "$STATE" 2>/dev/null | cut -d= -f2- | tr -d '"')
+if [ -n "$RADIO_VAL" ] && [ "$RADIO_VAL" != "none" ]; then
+  pass "RADIO set: $RADIO_VAL"
 else
   warn "RADIO not set — run et-radio"
 fi
 
-if [ -n "$RADIO_PORT" ]; then
-  pass "RADIO_PORT set: $RADIO_PORT"
+RADIO_PORT_VAL=$(grep "^RADIO_PORT=" "$STATE" 2>/dev/null | cut -d= -f2 | tr -d '"')
+if [ -n "$RADIO_PORT_VAL" ] && [ "$RADIO_PORT_VAL" != "none" ]; then
+  pass "RADIO_PORT set: $RADIO_PORT_VAL"
 else
   warn "RADIO_PORT not set — run et-radio"
 fi
@@ -168,8 +170,8 @@ else
   fail "rigctld failed to run"
 fi
 
-# Test with dummy rig (model 1)
-rigctld -m 1 -t 4532 >/dev/null 2>&1 &
+# Test with dummy rig (model 1) — use port 4533 to avoid conflicting with live rigctld@4532
+rigctld -m 1 -t 4533 >/dev/null 2>&1 &
 RIGPID=$!
 sleep 1
 if kill -0 $RIGPID 2>/dev/null; then
@@ -182,7 +184,7 @@ fi
 # ── QMX+ specific ─────────────────────────────────────────────────────────────
 section "QMX+ (plug in to test)"
 
-if lsusb 2>/dev/null | grep -qi "0483:a34f\|QRP Labs\|QMX"; then
+if lsusb 2>/dev/null | grep -qi "0483:a34c\|0483:a34f\|QRP Labs\|QMX"; then
   pass "QMX+ detected on USB"
   if ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | head -1 | grep -q tty; then
     pass "QMX+ serial port present"

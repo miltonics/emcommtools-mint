@@ -111,7 +111,7 @@ fi
 # ── Write state ───────────────────────────────────────────────────────────────
 sudo tee -a /dev/null <<EOF
 EOF
-sudo sed -i "s|^RADIO=.*|RADIO=${RADIO_NAME}|"               $STATE
+sudo sed -i "s|^RADIO=.*|RADIO=\"${RADIO_NAME}\"|"            $STATE
 sudo sed -i "s|^RADIO_PORT=.*|RADIO_PORT=${RADIO_PORT}|"     $STATE
 sudo sed -i "s|^RADIO_MODEL=.*|RADIO_MODEL=${RADIO_MODEL}|" $STATE  2>/dev/null \
   || echo "RADIO_MODEL=${RADIO_MODEL}" | sudo tee -a $STATE
