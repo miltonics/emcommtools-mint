@@ -25,6 +25,7 @@
     content: |
       RADIO_PORT=/dev/ttyACM0
       RADIO_BAUD=115200
+      RADIO_PTT=NONE
     owner: root
     group: root
     mode: "0644"
@@ -44,7 +45,15 @@
     content: |
       #!/bin/bash
       source /etc/hamradio/rigctld.env
-      exec /usr/bin/rigctld --model=$1 --rig-file=$RADIO_PORT --serial-speed=$RADIO_BAUD --port=4532
+      PTT_ARGS=""
+      if [ -n "$RADIO_PTT" ] && [ "$RADIO_PTT" != "NONE" ] && [ "$RADIO_PTT" != "VOX" ]; then
+        if [ "$RADIO_PTT" = "RTS" ] || [ "$RADIO_PTT" = "DTR" ]; then
+          PTT_ARGS="-P $RADIO_PTT -p $RADIO_PORT"
+        else
+          PTT_ARGS="-P $RADIO_PTT"
+        fi
+      fi
+      exec /usr/bin/rigctld --model=$1 --rig-file=$RADIO_PORT --serial-speed=$RADIO_BAUD --port=4532 $PTT_ARGS
     owner: root
     group: root
     mode: "0755"

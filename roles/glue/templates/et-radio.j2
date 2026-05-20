@@ -10,24 +10,26 @@ STATE={{ hamradio_etc_dir }}/state
 # Format: "Display Name|hamlib_model|default_baud|notes"
 # hamlib model numbers: rigctl -l to list all
 RADIOS=(
-  "Yaesu FT-817ND (DigiRig)|120|9600|DigiRig Mobile required"
-  "Yaesu FT-818ND (DigiRig)|120|9600|DigiRig Mobile required"
-  "Yaesu FT-857D (DigiRig)|122|9600|DigiRig Mobile required"
-  "Yaesu FT-897D (DigiRig)|122|9600|DigiRig Mobile required"
-  "Yaesu FT-991A (USB)|1035|38400|Connect via USB cable"
-  "Yaesu FT-891 (DigiRig DR-891)|1035|38400|DigiRig DR-891 required"
-  "Icom IC-705 (USB)|3085|115200|Connect via USB cable"
-  "Icom IC-7100 (USB)|3070|9600|Connect via USB cable"
-  "Icom IC-7200 (USB)|3075|9600|Connect via USB cable"
-  "Icom IC-7300 (USB)|3073|115200|Connect via USB cable"
-  "Elecraft KX2 (DigiRig)|2047|38400|DigiRig + Elecraft KX cables"
-  "QRP Labs QMX (USB)|2052|115200|JS8Call only, HF only"
-  "Lab599 TX-500MP (DigiRig)|2047|57600|DigiRig TX500 config required"
-  "Xiegu G90 (DigiRig)|2047|19200|DigiRig + Xiegu G90 cables"
-  "BG2FX FX-4CR|2047|115200|"
-  "(tr)uSDX (truSDX driver)|2|115200|Uses truSDX service — CAT via /tmp/trusdx_cat"
-  "Quansheng UV-K5 Pro (VHF/UHF)|1|9600|Audio only — no CAT; use with Direwolf for APRS/packet"
-  "Dumb Radio (DigiRig — audio only)|1|9600|No CAT control; set freq/mode on radio"
+  # Format: "Display Name|hamlib_model|baud|ptt_method|notes"
+  # PTT: RIG=CAT PTT, RTS=RTS line, DTR=DTR line, NONE=VOX/audio
+  "Yaesu FT-817ND (DigiRig)|120|9600|RTS|DigiRig Mobile required"
+  "Yaesu FT-818ND (DigiRig)|120|9600|RTS|DigiRig Mobile required"
+  "Yaesu FT-857D (DigiRig)|122|9600|RTS|DigiRig Mobile required"
+  "Yaesu FT-897D (DigiRig)|122|9600|RTS|DigiRig Mobile required"
+  "Yaesu FT-991A (USB)|1035|38400|RIG|Connect via USB cable"
+  "Yaesu FT-891 (DigiRig DR-891)|1035|38400|RTS|DigiRig DR-891 required"
+  "Icom IC-705 (USB)|3085|115200|RIG|Connect via USB cable"
+  "Icom IC-7100 (USB)|3070|9600|RIG|Connect via USB cable"
+  "Icom IC-7200 (USB)|3075|9600|RIG|Connect via USB cable"
+  "Icom IC-7300 (USB)|3073|115200|RIG|Connect via USB cable"
+  "Elecraft KX2 (DigiRig)|2047|38400|RTS|DigiRig + Elecraft KX cables"
+  "QRP Labs QMX (USB)|2052|115200|RIG|JS8Call only, HF only"
+  "Lab599 TX-500MP (DigiRig)|2047|57600|RTS|DigiRig TX500 config required"
+  "Xiegu G90 (DigiRig)|2047|19200|RTS|DigiRig + Xiegu G90 cables"
+  "BG2FX FX-4CR|2047|115200|RTS|"
+  "(tr)uSDX (truSDX driver)|2|115200|RIG|Uses truSDX service — CAT via /tmp/trusdx_cat"
+  "Quansheng UV-K5 Pro (VHF/UHF)|1|9600|NONE|Audio only — no CAT; use with Direwolf for APRS/packet"
+  "Dumb Radio (DigiRig — audio only)|1|9600|NONE|No CAT control; set freq/mode on radio"
 )
 
 # ── Display menu ────────────────────────────────────────────────────────────
@@ -52,7 +54,8 @@ ENTRY="${RADIOS[$((SEL-1))]}"
 RADIO_NAME=$(echo "$ENTRY" | cut -d'|' -f1)
 RADIO_MODEL=$(echo "$ENTRY" | cut -d'|' -f2)
 RADIO_BAUD=$(echo "$ENTRY" | cut -d'|' -f3)
-RADIO_NOTES=$(echo "$ENTRY" | cut -d'|' -f4)
+RADIO_PTT=$(echo "$ENTRY" | cut -d'|' -f4)
+RADIO_NOTES=$(echo "$ENTRY" | cut -d'|' -f5)
 
 echo ""
 echo "Selected: $RADIO_NAME"
@@ -121,6 +124,8 @@ sudo sed -i "s|^RADIO_MODEL=.*|RADIO_MODEL=${RADIO_MODEL}|" $STATE  2>/dev/null 
   || echo "RADIO_MODEL=${RADIO_MODEL}" | sudo tee -a $STATE
 sudo sed -i "s|^RADIO_BAUD=.*|RADIO_BAUD=${RADIO_BAUD}|"   $STATE  2>/dev/null \
   || echo "RADIO_BAUD=${RADIO_BAUD}" | sudo tee -a $STATE
+sudo sed -i "s|^RADIO_PTT=.*|RADIO_PTT=${RADIO_PTT}|"   $STATE  2>/dev/null \
+  || echo "RADIO_PTT=${RADIO_PTT}" | sudo tee -a $STATE
 sudo sed -i "s|^RADIO_AUDIO=.*|RADIO_AUDIO=${RADIO_AUDIO}|" $STATE  2>/dev/null \
   || echo "RADIO_AUDIO=${RADIO_AUDIO}" | sudo tee -a $STATE
 sudo sed -i "s|^RADIO_AUDIO_CAPTURE=.*|RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}|" $STATE 2>/dev/null \
@@ -131,6 +136,7 @@ if [ "$RADIO_MODEL" != "1" ] && ! echo "$RADIO_NAME" | grep -qi "trusdx"; then
   sudo tee /etc/hamradio/rigctld.env > /dev/null << ENVEOF
 RADIO_PORT=${RADIO_PORT}
 RADIO_BAUD=${RADIO_BAUD}
+RADIO_PTT=${RADIO_PTT}
 ENVEOF
   sudo systemctl stop "rigctld@*" 2>/dev/null || true
   sudo systemctl start "rigctld@${RADIO_MODEL}" && echo "CAT control started (rigctld)." || \
