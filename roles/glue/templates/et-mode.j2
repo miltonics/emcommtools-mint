@@ -132,61 +132,54 @@ case "$SEL" in
     ;;
 
   4) # APRS (YAAC)
-    sudo systemctl start direwolf
-    sleep 2
+    start_and_wait_for_service direwolf
     echo "Starting YAAC..."
     nohup yaac >/dev/null 2>&1 &
     ;;
 
   5) # Paracon
-    sudo systemctl start direwolf
-    sleep 2
+    start_and_wait_for_service direwolf
     echo "Starting Paracon..."
     nohup paracon >/dev/null 2>&1 &
     ;;
 
   6) # QtTermTCP
-    sudo systemctl start direwolf
-    sleep 2
+    start_and_wait_for_service direwolf
     echo "Starting QtTermTCP..."
     nohup qttermtcp >/dev/null 2>&1 &
     ;;
 
   7) # LinBPQ
-    sudo systemctl start direwolf
-    sleep 2
-    sudo systemctl start linbpq
+    start_and_wait_for_service direwolf
+    start_and_wait_for_service linbpq
     echo "LinBPQ started. Web UI: http://localhost:8012"
     ;;
 
   8) # Chattervox
-    sudo systemctl start direwolf
-    sleep 2
+    start_and_wait_for_service direwolf
     echo "Starting Chattervox..."
     chattervox chat --callsign "$CALLSIGN"
     ;;
 
   9) # APRS Digipeater
-    sudo systemctl start direwolf
+    start_and_wait_for_service direwolf
     echo "APRS Digipeater started via Direwolf. SSID: ${CALLSIGN}-4"
     ;;
 
   10) # Packet Digipeater
-    sudo systemctl start direwolf
+    start_and_wait_for_service direwolf
     echo "Packet Digipeater started via Direwolf. SSID: ${CALLSIGN}-2"
     ;;
 
   11) # Winlink AX.25
-    sudo systemctl start direwolf
-    sleep 2
+    start_and_wait_for_service direwolf
     echo "Starting Pat (Winlink AX.25)..."
     nohup pat http >/dev/null 2>&1 &
     echo "Pat web UI: http://localhost:8080"
     ;;
 
   12) # Winlink ARDOP
-    sudo systemctl start ardopc
-    sleep 3
+    start_and_wait_for_service ardopc
     echo "Starting Pat (Winlink ARDOP)..."
     nohup pat --listen ardop http >/dev/null 2>&1 &
     echo "Pat web UI: http://localhost:8080"
