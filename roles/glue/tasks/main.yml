@@ -93,25 +93,36 @@
       # et-info — display current hamradio system state
       STATE={{ hamradio_etc_dir }}/state
       source $STATE
-
-      echo ""
-      echo "╔══════════════════════════════════════╗"
-      echo "║       Ham Radio Mint System Info      ║"
-      echo "╠══════════════════════════════════════╣"
-      printf "║  %-10s %-24s ║\n" "CALLSIGN:" "${CALLSIGN:-N0CALL}"
-      printf "║  %-10s %-24s ║\n" "GRID:"     "${GRIDSQUARE:-AA00}"
-      printf "║  %-10s %-24s ║\n" "RADIO:"    "${RADIO:-none}"
-      printf "║  %-10s %-24s ║\n" "PORT:"     "${RADIO_PORT:-none}"
-      printf "║  %-10s %-24s ║\n" "AUDIO:"    "${RADIO_AUDIO:-none}"
-      printf "║  %-10s %-24s ║\n" "MODE:"     "${MODE:-none}"
-      echo "╠══════════════════════════════════════╣"
-      # Show rigctld status
+      W=38
+      div() { printf "╠"; printf '═%.0s' $(seq 1 $W); printf "╣\n"; }
+      row() { printf "║  %-12s %-$((W-15))s ║\n" "$1" "$2"; }
+      printf "╔"; printf '═%.0s' $(seq 1 $W); printf "╗\n"
+      printf "║%*s║\n" $W "Ham Radio Mint — $(date +%H:%M:%S)  "
+      div
+      row "CALLSIGN:"  "${CALLSIGN:-N0CALL}"
+      row "GRID:"      "${GRIDSQUARE:-AA00}"
+      row "OPERATOR:"  "${OPERATOR_NAME:-unknown}"
+      div
+      row "RADIO:"     "${RADIO:-none}"
+      row "PORT:"      "${RADIO_PORT:-none}"
+      row "BAUD:"      "${RADIO_BAUD:-none}"
+      row "AUDIO TX:"  "${RADIO_AUDIO:-none}"
+      row "AUDIO RX:"  "${RADIO_AUDIO_CAPTURE:-none}"
+      row "MODE:"      "${MODE:-none}"
+      div
       if systemctl is-active --quiet "rigctld@${RADIO_MODEL:-0}" 2>/dev/null; then
-        printf "║  %-10s %-24s ║\n" "CAT:" "Connected ✓"
+        row "CAT:"     "active (model ${RADIO_MODEL})"
       else
-        printf "║  %-10s %-24s ║\n" "CAT:" "Disconnected"
+        row "CAT:"     "inactive"
       fi
-      echo "╚══════════════════════════════════════╝"
+      for svc in direwolf ardopc linbpq; do
+        STATUS=$(systemctl is-active "$svc" 2>/dev/null)
+        row "$svc:" "$STATUS"
+      done
+      div
+      IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -1)
+      row "IP:" "${IP:-no network}"
+      printf "╚"; printf '═%.0s' $(seq 1 $W); printf "╝\n"
       echo ""
     owner: root
     group: root
