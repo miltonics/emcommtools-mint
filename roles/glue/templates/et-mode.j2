@@ -97,12 +97,19 @@ patch_audio_ini() {
   set_ini_key "$FILE" Audio SoundInName  "$RADIO_AUDIO_CAPTURE"
   set_ini_key "$FILE" Audio SoundOutName "$RADIO_AUDIO"
 }
+# For Qt6/FFmpeg apps (JS8Call-improved, WSJT-X) — use PipeWire names
+patch_audio_ini_pw() {
+  local FILE="$1"
+  [ -f "$FILE" ] || return
+  set_ini_key "$FILE" Audio SoundInName  "${RADIO_AUDIO_CAPTURE_PW:-$RADIO_AUDIO_CAPTURE}"
+  set_ini_key "$FILE" Audio SoundOutName "${RADIO_AUDIO_PW:-$RADIO_AUDIO}"
+}
 
 # ── Mode logic ────────────────────────────────────────────────────────────────
 case "$SEL" in
 
   1) # JS8Call
-    patch_audio_ini "${HOME}/.config/JS8Call.ini"
+    patch_audio_ini_pw "${HOME}/.config/JS8Call.ini"
     sed -i "s|^MyCall=.*|MyCall=${CALLSIGN}|"   "${HOME}/.config/JS8Call.ini"
     sed -i "s|^MyGrid=.*|MyGrid=${GRIDSQUARE}|" "${HOME}/.config/JS8Call.ini"
     echo "Starting JS8Call..."
@@ -117,7 +124,7 @@ case "$SEL" in
     set_ini_key "$WSJTX_INI" Rig     CATNetworkPort "4532"
     set_ini_key "$WSJTX_INI" Rig     CATNetworkServer "127.0.0.1"
     set_ini_key "$WSJTX_INI" Rig     PTTMethod     "2"
-    patch_audio_ini "$WSJTX_INI"
+    patch_audio_ini_pw "$WSJTX_INI"
     echo "Starting WSJT-X..."
     nohup wsjtx >/dev/null 2>&1 &
     ;;

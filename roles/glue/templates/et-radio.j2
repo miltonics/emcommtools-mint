@@ -103,9 +103,15 @@ if [ "${#CARDS[@]}" -gt 0 ]; then
   if [ -z "$AUDIO_SEL" ]; then
     RADIO_AUDIO="hw:Loopback,0"
     RADIO_AUDIO_CAPTURE="hw:Loopback,1"
+    RADIO_AUDIO_PW=$(pactl list sinks short 2>/dev/null | awk '{print $2}' | grep -i loopback | head -1)
+    RADIO_AUDIO_CAPTURE_PW=$(pactl list sources short 2>/dev/null | grep -v monitor | awk '{print $2}' | grep -i loopback | head -1)
+    RADIO_AUDIO_PW="${RADIO_AUDIO_PW:-Loopback Analog Stereo}"
+    RADIO_AUDIO_CAPTURE_PW="${RADIO_AUDIO_CAPTURE_PW:-Loopback Analog Stereo}"
   else
     RADIO_AUDIO="hw:${AUDIO_SEL},0"
     RADIO_AUDIO_CAPTURE="hw:${AUDIO_SEL},0"
+    RADIO_AUDIO_PW=$(pactl list sinks short 2>/dev/null | awk -v card="$AUDIO_SEL" 'NR==card+1{print $2}' | head -1)
+    RADIO_AUDIO_CAPTURE_PW=$(pactl list sources short 2>/dev/null | grep -v monitor | awk -v card="$AUDIO_SEL" 'NR==card+1{print $2}' | head -1)
   fi
 else
   RADIO_AUDIO="hw:Loopback,0"
@@ -127,6 +133,10 @@ sudo sed -i "s|^RADIO_AUDIO=.*|RADIO_AUDIO=${RADIO_AUDIO}|" $STATE  2>/dev/null 
   || echo "RADIO_AUDIO=${RADIO_AUDIO}" | sudo tee -a $STATE
 sudo sed -i "s|^RADIO_AUDIO_CAPTURE=.*|RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}|" $STATE 2>/dev/null \
   || echo "RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}" | sudo tee -a $STATE
+sudo sed -i "s|^RADIO_AUDIO_PW=.*|RADIO_AUDIO_PW=${RADIO_AUDIO_PW}|" $STATE 2>/dev/null \
+  || echo "RADIO_AUDIO_PW=${RADIO_AUDIO_PW}" | sudo tee -a $STATE
+sudo sed -i "s|^RADIO_AUDIO_CAPTURE_PW=.*|RADIO_AUDIO_CAPTURE_PW=${RADIO_AUDIO_CAPTURE_PW}|" $STATE 2>/dev/null \
+  || echo "RADIO_AUDIO_CAPTURE_PW=${RADIO_AUDIO_CAPTURE_PW}" | sudo tee -a $STATE
 
 # Start rigctld for non-truSDX, non-dumb radios
 if [ "$RADIO_MODEL" != "1" ] && ! echo "$RADIO_NAME" | grep -qi "trusdx"; then

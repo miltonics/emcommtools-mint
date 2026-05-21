@@ -140,6 +140,8 @@
       RADIO_BAUD=none
       RADIO_AUDIO=none
       RADIO_AUDIO_CAPTURE=none
+      RADIO_AUDIO_PW=none
+      RADIO_AUDIO_CAPTURE_PW=none
       MODE=none
     force: false   # don't overwrite if already customised
     owner: root
