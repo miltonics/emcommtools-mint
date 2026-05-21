@@ -112,8 +112,8 @@ if [ "${#CARDS[@]}" -gt 0 ]; then
     RADIO_AUDIO_CAPTURE="hw:${AUDIO_SEL},0"
     # Match PipeWire sink by ALSA card number in the sink name
     CARD_NAME=$(aplay -l 2>/dev/null | grep "^card ${AUDIO_SEL}:" | awk -F'[][]' '{print $2}' | head -1 | tr ' ' '_')
-    RADIO_AUDIO_PW=$(pactl list sinks short 2>/dev/null | awk '{print $2}' | grep -i "${CARD_NAME}" | head -1)
-    RADIO_AUDIO_CAPTURE_PW=$(pactl list sources short 2>/dev/null | grep -v monitor | awk '{print $2}' | grep -i "${CARD_NAME}" | head -1)
+    RADIO_AUDIO_PW=$(pactl list sinks 2>/dev/null | grep -A1 "Name:.*${CARD_NAME}" | grep "Description:" | head -1 | sed 's/.*Description: //')
+    RADIO_AUDIO_CAPTURE_PW=$(pactl list sources 2>/dev/null | grep -v monitor | grep -A1 "Name:.*${CARD_NAME}" | grep "Description:" | head -1 | sed 's/.*Description: //')
     # Fallback if name match fails
     RADIO_AUDIO_PW="${RADIO_AUDIO_PW:-$RADIO_AUDIO}"
     RADIO_AUDIO_CAPTURE_PW="${RADIO_AUDIO_CAPTURE_PW:-$RADIO_AUDIO_CAPTURE}"
