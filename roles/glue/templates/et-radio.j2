@@ -94,21 +94,18 @@ fi
 # ── Detect audio device (PipeWire/PulseAudio names) ──────────────────────────
 echo ""
 echo "Detecting audio devices..."
-mapfile -t SINKS < <(pactl list sinks short 2>/dev/null | awk '{print $2}')
-if [ "${#SINKS[@]}" -gt 0 ]; then
-  echo "Available audio output devices:"
-  j=1
-  for s in "${SINKS[@]}"; do printf "  %d) %s\n" $j "$s"; ((j++)); done
+mapfile -t CARDS < <(aplay -l 2>/dev/null | grep "^card" | awk '{print $2}' | tr -d ':')
+if [ "${#CARDS[@]}" -gt 0 ]; then
+  echo "Available ALSA playback cards:"
+  aplay -l 2>/dev/null | grep "^card"
   echo ""
-  read -p "Select audio device number for radio (leave blank for Loopback): " AUDIO_SEL
+  read -p "Enter audio card number for radio (leave blank for Loopback): " AUDIO_SEL
   if [ -z "$AUDIO_SEL" ]; then
-    RADIO_AUDIO=$(pactl list sinks short 2>/dev/null | awk '{print $2}' | grep -i loopback | head -1)
-    RADIO_AUDIO_CAPTURE=$(pactl list sources short 2>/dev/null | grep -v monitor | awk '{print $2}' | grep -i loopback | head -1)
-    RADIO_AUDIO="${RADIO_AUDIO:-hw:Loopback,0}"
-    RADIO_AUDIO_CAPTURE="${RADIO_AUDIO_CAPTURE:-hw:Loopback,1}"
+    RADIO_AUDIO="hw:Loopback,0"
+    RADIO_AUDIO_CAPTURE="hw:Loopback,1"
   else
-    RADIO_AUDIO="${SINKS[$((AUDIO_SEL-1))]}"
-    RADIO_AUDIO_CAPTURE="${RADIO_AUDIO/alsa_output/alsa_input}"
+    RADIO_AUDIO="hw:${AUDIO_SEL},0"
+    RADIO_AUDIO_CAPTURE="hw:${AUDIO_SEL},0"
   fi
 else
   RADIO_AUDIO="hw:Loopback,0"
