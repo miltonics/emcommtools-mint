@@ -193,3 +193,40 @@
     group: root
     mode: "0755"
   tags: [glue]
+
+- name: Install et-kill-all (clean shutdown of all radio services)
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-kill-all"
+    content: |
+      #!/bin/bash
+      # et-kill-all — stop all EmComm radio services and applications cleanly
+      # Called by et-mode before switching modes. Safe to run at any time.
+
+      echo "Stopping all radio services..."
+
+      # ── Kill GUI applications ──────────────────────────────────────────────
+      pkill -f "js8call"    2>/dev/null && echo "  stopped: js8call"
+      pkill -f "wsjtx"      2>/dev/null && echo "  stopped: wsjtx"
+      pkill -f "fldigi"     2>/dev/null && echo "  stopped: fldigi"
+      pkill -f "flrig"      2>/dev/null && echo "  stopped: flrig"
+      pkill -f "yaac"       2>/dev/null && echo "  stopped: yaac"
+      pkill -f "paracon"    2>/dev/null && echo "  stopped: paracon"
+      pkill -f "qttermtcp"  2>/dev/null && echo "  stopped: qttermtcp"
+      pkill -f "chattervox" 2>/dev/null && echo "  stopped: chattervox"
+      pkill -f "pat http"   2>/dev/null && echo "  stopped: pat"
+
+      # ── Stop systemd services ──────────────────────────────────────────────
+      for svc in direwolf ardopc linbpq; do
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+          sudo systemctl stop "$svc" && echo "  stopped: $svc"
+        fi
+      done
+
+      # ── Wait for ports to clear ────────────────────────────────────────────
+      sleep 1
+
+      echo "All services stopped."
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [glue]

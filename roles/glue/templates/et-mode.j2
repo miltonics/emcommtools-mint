@@ -54,14 +54,25 @@ fi
 MODE_NAME="${MODES[$((SEL-1))]}"
 
 # ── Stop all running et-services ─────────────────────────────────────────────
-echo "Stopping all active modes..."
-pkill -f "js8call" 2>/dev/null
-pkill -f "fldigi"  2>/dev/null
-pkill -f "wsjtx"   2>/dev/null
-sudo systemctl stop direwolf 2>/dev/null
-sudo systemctl stop ardopc   2>/dev/null
-sudo systemctl stop linbpq   2>/dev/null
-sleep 1
+et-kill-all
+
+# ── Helper: start service and wait for it to be active ───────────────────────
+start_and_wait_for_service() {
+  local svc="$1"
+  local timeout="${2:-10}"
+  sudo systemctl start "$svc"
+  local count=0
+  while ! systemctl is-active --quiet "$svc" 2>/dev/null; do
+    sleep 1
+    ((count++))
+    if [ "$count" -ge "$timeout" ]; then
+      echo "WARNING: $svc failed to start within ${timeout}s"
+      return 1
+    fi
+  done
+  echo "  started: $svc"
+  return 0
+}
 
 # ── Write mode to state ───────────────────────────────────────────────────────
 sudo sed -i "s|^MODE=.*|MODE=\"${MODE_NAME}\"|" $STATE
