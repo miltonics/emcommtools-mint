@@ -23,7 +23,7 @@ RADIOS=(
   "Icom IC-7200 (USB)|3075|9600|RIG|Connect via USB cable"
   "Icom IC-7300 (USB)|3073|115200|RIG|Connect via USB cable"
   "Elecraft KX2 (DigiRig)|2047|38400|RTS|DigiRig + Elecraft KX cables"
-  "QRP Labs QMX (USB)|2052|115200|RIG|JS8Call only, HF only"
+  "QRP Labs QMX (USB)|2052|115200|RIG|HF digital modes — JS8Call, FT8, FT4, Winlink ARDOP"
   "Lab599 TX-500MP (DigiRig)|2047|57600|RTS|DigiRig TX500 config required"
   "Xiegu G90 (DigiRig)|2047|19200|RTS|DigiRig + Xiegu G90 cables"
   "BG2FX FX-4CR|2047|115200|RTS|"
@@ -111,7 +111,7 @@ if [ "${#CARDS[@]}" -gt 0 ]; then
     RADIO_AUDIO="hw:${AUDIO_SEL},0"
     RADIO_AUDIO_CAPTURE="hw:${AUDIO_SEL},0"
     # Match PipeWire sink by ALSA card number in the sink name
-    CARD_NAME=$(aplay -l 2>/dev/null | grep "^card ${AUDIO_SEL}:" | awk -F'[][]' '{print $2}' | head -1)
+    CARD_NAME=$(aplay -l 2>/dev/null | grep "^card ${AUDIO_SEL}:" | awk -F'[][]' '{print $2}' | head -1 | tr ' ' '_')
     RADIO_AUDIO_PW=$(pactl list sinks short 2>/dev/null | awk '{print $2}' | grep -i "${CARD_NAME}" | head -1)
     RADIO_AUDIO_CAPTURE_PW=$(pactl list sources short 2>/dev/null | grep -v monitor | awk '{print $2}' | grep -i "${CARD_NAME}" | head -1)
     # Fallback if name match fails
