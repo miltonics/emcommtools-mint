@@ -82,7 +82,7 @@ set_ini_key() {
   local file="$1" section="$2" key="$3" value="$4"
   [ -f "$file" ] || touch "$file"
   if grep -q "^${key}=" "$file"; then
-    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    sed -i "s|^${key}=.*|${key}=${value/|/\|}|" "$file"
   elif grep -q "^\[${section}\]" "$file"; then
     sed -i "/^\[${section}\]/a ${key}=${value}" "$file"
   else
