@@ -138,16 +138,16 @@ sudo sed -i "s|^RADIO_AUDIO=.*|RADIO_AUDIO=${RADIO_AUDIO}|" $STATE  2>/dev/null 
   || echo "RADIO_AUDIO=${RADIO_AUDIO}" | sudo tee -a $STATE
 sudo sed -i "s|^RADIO_AUDIO_CAPTURE=.*|RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}|" $STATE 2>/dev/null \
   || echo "RADIO_AUDIO_CAPTURE=${RADIO_AUDIO_CAPTURE}" | sudo tee -a $STATE
-# Write PipeWire audio device names
+# Write PipeWire audio device names (quoted to handle spaces)
 if sudo grep -q "^RADIO_AUDIO_PW=" $STATE 2>/dev/null; then
-  sudo sed -i "s|^RADIO_AUDIO_PW=.*|RADIO_AUDIO_PW=${RADIO_AUDIO_PW}|" $STATE
+  sudo sed -i "s|^RADIO_AUDIO_PW=.*|RADIO_AUDIO_PW=\"${RADIO_AUDIO_PW}\"|" $STATE
 else
-  echo "RADIO_AUDIO_PW=${RADIO_AUDIO_PW}" | sudo tee -a $STATE > /dev/null
+  echo "RADIO_AUDIO_PW=\"${RADIO_AUDIO_PW}\"" | sudo tee -a $STATE > /dev/null
 fi
 if sudo grep -q "^RADIO_AUDIO_CAPTURE_PW=" $STATE 2>/dev/null; then
-  sudo sed -i "s|^RADIO_AUDIO_CAPTURE_PW=.*|RADIO_AUDIO_CAPTURE_PW=${RADIO_AUDIO_CAPTURE_PW}|" $STATE
+  sudo sed -i "s|^RADIO_AUDIO_CAPTURE_PW=.*|RADIO_AUDIO_CAPTURE_PW=\"${RADIO_AUDIO_CAPTURE_PW}\"|" $STATE
 else
-  echo "RADIO_AUDIO_CAPTURE_PW=${RADIO_AUDIO_CAPTURE_PW}" | sudo tee -a $STATE > /dev/null
+  echo "RADIO_AUDIO_CAPTURE_PW=\"${RADIO_AUDIO_CAPTURE_PW}\"" | sudo tee -a $STATE > /dev/null
 fi
 
 # Start rigctld for non-truSDX, non-dumb radios
