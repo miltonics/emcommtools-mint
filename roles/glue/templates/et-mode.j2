@@ -110,6 +110,9 @@ case "$SEL" in
 
   1) # JS8Call
     patch_audio_ini_pw "${HOME}/.config/JS8Call.ini"
+    sed -i "s|^CATNetworkPort=.*|CATNetworkPort=4532|" "${HOME}/.config/JS8Call.ini"
+    sed -i "s|^CATNetworkServer=.*|CATNetworkServer=127.0.0.1|" "${HOME}/.config/JS8Call.ini"
+    sed -i "s|^CATSerialPort=.*|CATSerialPort=|" "${HOME}/.config/JS8Call.ini"
     sed -i "s|^MyCall=.*|MyCall=${CALLSIGN}|"   "${HOME}/.config/JS8Call.ini"
     sed -i "s|^MyGrid=.*|MyGrid=${GRIDSQUARE}|" "${HOME}/.config/JS8Call.ini"
     echo "Starting JS8Call..."
