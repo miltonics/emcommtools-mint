@@ -1,0 +1,182 @@
+---
+# roles/launcher/tasks/main.yml
+# Installs JS8-tracker and JS8Spotter into ~/radio, writes the
+# start_radio / stop_radio scripts, and puts Start/Stop icons on the desktop.
+
+- name: Install launcher dependencies
+  ansible.builtin.apt:
+    name:
+      - git
+      - python3-venv
+      - python3-pip
+      - python3-tk          # JS8Spotter GUI
+      - python3-pil         # JS8Spotter images
+      - python3-pil.imagetk
+      - zenity              # radio picker dialog
+      - unzip
+      - xdg-user-dirs
+    state: present
+  tags: [launcher]
+
+- name: Create ~/radio and ~/radio/logs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  loop:
+    - "{{ launcher_radio_dir }}"
+    - "{{ launcher_radio_dir }}/logs"
+  tags: [launcher]
+
+# --- js8-tracker ---------------------------------------------------------
+
+- name: Clone js8-tracker
+  ansible.builtin.git:
+    repo: "{{ js8tracker_repo_url }}"
+    dest: "{{ js8tracker_dir }}"
+    version: main
+    update: true
+  become: true
+  become_user: "{{ radio_user }}"
+  tags: [launcher]
+
+- name: Create js8-tracker venv and install requirements
+  ansible.builtin.pip:
+    requirements: "{{ js8tracker_dir }}/requirements.txt"
+    virtualenv: "{{ js8tracker_dir }}/venv"
+    virtualenv_command: python3 -m venv
+  become: true
+  become_user: "{{ radio_user }}"
+  tags: [launcher]
+
+# --- JS8Spotter ----------------------------------------------------------
+
+- name: Look for an existing JS8Spotter
+  ansible.builtin.find:
+    paths: "{{ launcher_radio_dir }}"
+    patterns: "js8spotter.py"
+    recurse: true
+    depth: 3
+  register: js8spotter_found
+  tags: [launcher]
+
+- name: Download and unpack JS8Spotter
+  ansible.builtin.unarchive:
+    src: "{{ js8spotter_zip_url }}"
+    dest: "{{ launcher_radio_dir }}"
+    remote_src: true
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+  when:
+    - js8spotter_found.matched == 0
+    - js8spotter_zip_url | length > 0
+  tags: [launcher]
+
+- name: Note if JS8Spotter still needs to be added by hand
+  ansible.builtin.debug:
+    msg: >-
+      JS8Spotter not installed. Download the Linux zip from
+      https://kf7mix.com/js8spotter.html and unzip it into
+      {{ launcher_radio_dir }}/ (or set js8spotter_zip_url and re-run
+      with --tags launcher). Start Radio skips it until then.
+  when:
+    - js8spotter_found.matched == 0
+    - js8spotter_zip_url | length == 0
+  tags: [launcher]
+
+# --- Let the radio user start/stop radio services without a password -----
+
+- name: Allow radio user to start/stop radio driver services
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/hamradio-launcher
+    content: |
+      # Managed by emcommtools-mint (roles/launcher)
+      {% for r in launcher_radios if r.service %}
+      {{ radio_user }} ALL=(root) NOPASSWD: /usr/bin/systemctl start {{ r.service }}, /usr/bin/systemctl stop {{ r.service }}
+      {% endfor %}
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  tags: [launcher]
+
+# --- Scripts -------------------------------------------------------------
+
+- name: Install start_radio.sh and stop_radio.sh
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ launcher_radio_dir }}/{{ item }}"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  loop:
+    - start_radio.sh
+    - stop_radio.sh
+  tags: [launcher]
+
+# --- Desktop icons -------------------------------------------------------
+
+- name: Find the desktop folder
+  ansible.builtin.command: xdg-user-dir DESKTOP
+  become: true
+  become_user: "{{ radio_user }}"
+  register: desktop_dir
+  changed_when: false
+  failed_when: false
+  tags: [launcher]
+
+- name: Set desktop path
+  ansible.builtin.set_fact:
+    launcher_desktop: >-
+      {{ desktop_dir.stdout
+         if (desktop_dir.rc == 0 and desktop_dir.stdout | length > 0
+             and desktop_dir.stdout != radio_user_home)
+         else radio_user_home ~ '/Desktop' }}
+  tags: [launcher]
+
+- name: Make sure the desktop folder exists
+  ansible.builtin.file:
+    path: "{{ launcher_desktop }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [launcher]
+
+- name: Install Start Radio / Stop Radio desktop icons
+  ansible.builtin.template:
+    src: "{{ item }}.desktop.j2"
+    dest: "{{ launcher_desktop }}/{{ item }}.desktop"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  loop:
+    - start-radio
+    - stop-radio
+  tags: [launcher]
+
+- name: Also add them to the app menu
+  ansible.builtin.template:
+    src: "{{ item }}.desktop.j2"
+    dest: "/usr/share/applications/{{ item }}.desktop"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - start-radio
+    - stop-radio
+  tags: [launcher]
+
+- name: Mark desktop icons as trusted (Cinnamon/Nemo)
+  ansible.builtin.command:
+    cmd: gio set "{{ launcher_desktop }}/{{ item }}.desktop" metadata::trusted true
+  become: true
+  become_user: "{{ radio_user }}"
+  loop:
+    - start-radio
+    - stop-radio
+  changed_when: false
+  failed_when: false
+  tags: [launcher]

@@ -1,0 +1,47 @@
+#!/bin/bash
+# =============================================================
+# stop_radio.sh: stop everything start_radio.sh launched
+# Managed by emcommtools-mint (roles/launcher)
+# =============================================================
+
+LOG_DIR="{{ launcher_radio_dir }}/logs"
+
+stop_pid() {
+    local name=$1
+    local pidfile="$LOG_DIR/${name}.pid"
+    if [ -f "$pidfile" ]; then
+        local pid
+        pid=$(cat "$pidfile")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "[stop_radio] Stopping $name (PID $pid)..."
+            kill "$pid"
+            for _ in 1 2 3 4 5; do
+                kill -0 "$pid" 2>/dev/null || break
+                sleep 1
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid"
+                echo "[stop_radio] Force-killed $name"
+            fi
+        fi
+        rm -f "$pidfile"
+    fi
+}
+
+stop_pid js8tracker
+stop_pid js8spotter
+stop_pid js8call
+
+# Stop the radio driver service, but only if start_radio started it
+if [ -f "$LOG_DIR/service.started" ]; then
+    SERVICE=$(cat "$LOG_DIR/service.started")
+    echo "[stop_radio] Stopping $SERVICE service..."
+    sudo -n /usr/bin/systemctl stop "$SERVICE"
+    rm -f "$LOG_DIR/service.started"
+fi
+rm -f "$LOG_DIR/radio.current"
+
+echo "[stop_radio] Done."
+if [ ! -t 1 ] && command -v notify-send >/dev/null; then
+    notify-send "Stop Radio" "All radio programs stopped."
+fi

@@ -87,6 +87,10 @@
     - role: glue
       tags: [glue]
 
+    # --- Start/Stop Radio launcher + desktop icons ---
+    - role: launcher
+      tags: [launcher]
+
     # --- Desktop status widget ---
     - role: conky
       tags: [conky]

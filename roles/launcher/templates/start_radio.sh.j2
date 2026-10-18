@@ -1,0 +1,146 @@
+#!/bin/bash
+# =============================================================
+# start_radio.sh: pick a radio, then launch the radio programs
+# Managed by emcommtools-mint (roles/launcher)
+#
+#   1. Radio driver service, if the radio needs one (truSDX)
+#   2. JS8Call, with a separate settings profile per radio
+#   3. JS8Spotter
+#   4. JS8-tracker backend (UI at http://127.0.0.1:5000)
+#
+# Usage:
+#   start_radio.sh            ask which radio
+#   start_radio.sh truSDX     skip the question
+#   start_radio.sh QMX
+#
+# Stop everything with stop_radio.sh
+# =============================================================
+
+RADIO_DIR="{{ launcher_radio_dir }}"
+TRACKER_DIR="{{ js8tracker_dir }}"
+TRACKER_SCRIPT="$TRACKER_DIR/js8_tracker_backend.py"
+TRACKER_VENV="$TRACKER_DIR/venv"
+LOG_DIR="$RADIO_DIR/logs"
+JS8CALL_BIN="/usr/local/bin/js8call"
+
+mkdir -p "$LOG_DIR"
+
+# Radio table: name|js8call rig profile|driver service ("" = none)
+RADIOS=(
+{% for r in launcher_radios %}
+  "{{ r.name }}|{{ r.rig }}|{{ r.service }}"
+{% endfor %}
+)
+
+# Show messages in a window when launched from the desktop icon
+say() {
+    echo "[start_radio] $*"
+    if [ ! -t 1 ] && command -v notify-send >/dev/null; then
+        notify-send "Start Radio" "$*"
+    fi
+}
+
+already_running() {
+    local f="$LOG_DIR/$1.pid"
+    [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null
+}
+
+if already_running js8call; then
+    say "JS8Call is already running. Use Stop Radio first to switch radios."
+    exit 0
+fi
+
+# ── Pick the radio ───────────────────────────────────────
+CHOICE="$1"
+if [ -z "$CHOICE" ]; then
+    NAMES=()
+    for r in "${RADIOS[@]}"; do NAMES+=("${r%%|*}"); done
+    if [ -t 0 ]; then
+        echo "Which radio?"
+        select CHOICE in "${NAMES[@]}"; do [ -n "$CHOICE" ] && break; done
+    else
+        CHOICE=$(zenity --list --title="Start Radio" \
+            --text="Which radio is connected?" \
+            --column="Radio" "${NAMES[@]}" \
+            --height=220 --width=300 2>/dev/null)
+    fi
+fi
+[ -z "$CHOICE" ] && { say "No radio selected, nothing started."; exit 0; }
+
+ENTRY=""
+for r in "${RADIOS[@]}"; do
+    if [ "$(echo "${r%%|*}" | tr '[:upper:]' '[:lower:]')" = "$(echo "$CHOICE" | tr '[:upper:]' '[:lower:]')" ]; then
+        ENTRY="$r"
+    fi
+done
+[ -z "$ENTRY" ] && { say "Unknown radio: $CHOICE"; exit 1; }
+
+RADIO_NAME=$(echo "$ENTRY" | cut -d'|' -f1)
+RIG_PROFILE=$(echo "$ENTRY" | cut -d'|' -f2)
+SERVICE=$(echo "$ENTRY" | cut -d'|' -f3)
+echo "$RADIO_NAME" > "$LOG_DIR/radio.current"
+say "Starting with $RADIO_NAME"
+
+# ── 1. Radio driver service ──────────────────────────────
+if [ -n "$SERVICE" ]; then
+    if ! systemctl is-active --quiet "$SERVICE"; then
+        echo "[start_radio] Starting $SERVICE service..."
+        sudo -n /usr/bin/systemctl start "$SERVICE" || {
+            say "Could not start $SERVICE. Is the radio plugged in? Check: journalctl -u $SERVICE"
+            exit 1
+        }
+        sleep 3
+    fi
+    if ! systemctl is-active --quiet "$SERVICE"; then
+        say "$SERVICE failed to stay running. Check: journalctl -u $SERVICE"
+        exit 1
+    fi
+    echo "$SERVICE" > "$LOG_DIR/service.started"
+fi
+
+# ── 2. JS8Call ───────────────────────────────────────────
+# Each radio gets its own profile: ~/.config/JS8Call - <rig>.ini
+# The first time, seed it from the main JS8Call.ini so callsign/grid carry over.
+PROFILE_INI="$HOME/.config/JS8Call - $RIG_PROFILE.ini"
+if [ ! -f "$PROFILE_INI" ] && [ -f "$HOME/.config/JS8Call.ini" ]; then
+    cp "$HOME/.config/JS8Call.ini" "$PROFILE_INI"
+    FIRST_RUN=1
+fi
+
+if [ -x "$JS8CALL_BIN" ]; then
+    nohup "$JS8CALL_BIN" --rig-name "$RIG_PROFILE" > "$LOG_DIR/js8call.log" 2>&1 &
+    echo $! > "$LOG_DIR/js8call.pid"
+    echo "[start_radio] JS8Call started for $RADIO_NAME (PID $!)"
+    [ -n "$FIRST_RUN" ] && say "First run for $RADIO_NAME: set Radio and Audio in JS8Call Settings once, they are saved for next time."
+    echo "[start_radio] Waiting 4s for JS8Call to open ports..."
+    sleep 4
+else
+    say "JS8Call not found at $JS8CALL_BIN. Run the playbook with --tags js8call."
+fi
+
+# ── 3. JS8Spotter ────────────────────────────────────────
+SPOTTER_SCRIPT=$(find "$RADIO_DIR" -maxdepth 3 -name js8spotter.py 2>/dev/null | head -1)
+if [ -n "$SPOTTER_SCRIPT" ]; then
+    ( cd "$(dirname "$SPOTTER_SCRIPT")" && \
+      nohup python3 "$SPOTTER_SCRIPT" > "$LOG_DIR/js8spotter.log" 2>&1 &
+      echo $! > "$LOG_DIR/js8spotter.pid" )
+    echo "[start_radio] JS8Spotter started"
+else
+    echo "[start_radio] JS8Spotter not found under $RADIO_DIR, skipping"
+fi
+
+# ── 4. JS8-tracker ───────────────────────────────────────
+if [ -x "$TRACKER_VENV/bin/python3" ] && [ -f "$TRACKER_SCRIPT" ]; then
+    ( cd "$TRACKER_DIR" && \
+      nohup "$TRACKER_VENV/bin/python3" "$TRACKER_SCRIPT" > "$LOG_DIR/js8tracker.log" 2>&1 &
+      echo $! > "$LOG_DIR/js8tracker.pid" )
+    echo "[start_radio] JS8-tracker started"
+else
+    echo "[start_radio] JS8-tracker not installed, skipping"
+fi
+
+echo ""
+echo "  Radio: $RADIO_NAME"
+echo "  UI:    http://127.0.0.1:5000"
+echo "  Logs:  $LOG_DIR"
+echo "  Stop:  $RADIO_DIR/stop_radio.sh"

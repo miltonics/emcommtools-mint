@@ -1,0 +1,26 @@
+---
+# roles/launcher/defaults/main.yml
+# Start/Stop Radio launcher: JS8Call + JS8Spotter + js8-tracker,
+# with a radio picker (truSDX or QMX) and desktop icons.
+
+launcher_radio_dir: "{{ radio_user_home }}/radio"
+
+js8tracker_repo_url: "https://github.com/miltonics/JS8-tracker.git"
+js8tracker_dir: "{{ launcher_radio_dir }}/js8-tracker"
+
+# JS8Spotter (KF7MIX) is not on GitHub. Two ways to supply it:
+#   1. Set js8spotter_zip_url to the zip link from https://kf7mix.com/js8spotter.html
+#   2. Or leave it blank and unzip it yourself into ~/radio/ ; the start
+#      script finds js8spotter.py anywhere under ~/radio.
+js8spotter_zip_url: ""
+
+# Radios offered by the picker. "rig" is the JS8Call --rig-name profile,
+# so each radio keeps its own CAT and audio settings inside JS8Call.
+# "service" is a systemd unit started before JS8Call (blank = none).
+launcher_radios:
+  - name: "truSDX"
+    rig: "truSDX"
+    service: "trusdx"
+  - name: "QMX"
+    rig: "QMX"
+    service: ""
