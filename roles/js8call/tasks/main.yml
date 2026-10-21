@@ -73,6 +73,7 @@
 - name: Download JS8Call-improved AppImage
   ansible.builtin.get_url:
     url: "{{ js8call_appimage_url }}"
+    timeout: 300
     dest: /usr/local/bin/js8call
     mode: "0755"
     owner: root
