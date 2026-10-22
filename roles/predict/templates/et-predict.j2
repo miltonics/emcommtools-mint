@@ -1,59 +1,6 @@
 #!/bin/bash
 # et-predict: open the offline HF propagation map
 # Managed by emcommtools-mint (roles/predict)
-#
-# 1. Copies your callsign and grid (from et-user) to where et-api looks for them
-# 2. Starts et-api if it isn't running, and waits for it to be ready
-# 3. Opens et-predict-app
 
-STATE={{ hamradio_etc_dir }}/state
-USER_JSON="$HOME/.config/emcomm-tools/user.json"
-API="http://localhost:1981"
-
-msg() {
-    echo "[et-predict] $*"
-    if [ ! -t 1 ] && command -v notify-send >/dev/null; then
-        notify-send "HF Prediction" "$*"
-    fi
-}
-
-# ── 1. Your location ───────────────────────────────────────
-CALLSIGN=$(grep '^CALLSIGN=' "$STATE" 2>/dev/null | cut -d= -f2 | tr -d '"')
-GRID=$(grep '^GRIDSQUARE=' "$STATE" 2>/dev/null | cut -d= -f2 | tr -d '"')
-if [ -z "$GRID" ]; then
-    msg "No grid square set. Run et-user first so predictions start from your location."
-fi
-mkdir -p "$(dirname "$USER_JSON")"
-jq -n --arg c "${CALLSIGN:-N0CALL}" --arg g "${GRID:-AA00}" \
-    '{callsign: $c, grid: $g, winlinkPasswd: ""}' > "$USER_JSON"
-
-# ── 2. et-api ──────────────────────────────────────────────
-api_up() { curl -sf -o /dev/null "$API/api/geo/position"; }
-
-if ! api_up; then
-    systemctl --user start et-api 2>/dev/null || \
-        (cd "$HOME" && nohup {{ et_api_dir }}/bin/et-api > /tmp/et-api.log 2>&1 &)
-
-    # First start builds search indexes, which can take a minute
-    wait_api() {
-        for _ in $(seq 1 90); do
-            api_up && return 0
-            sleep 2
-        done
-        return 1
-    }
-    if [ -t 1 ]; then
-        echo "[et-predict] Starting et-api (first start can take a minute)..."
-        wait_api
-    else
-        wait_api | zenity --progress --pulsate --auto-close --no-cancel \
-            --title="HF Prediction" --text="Starting prediction service..." 2>/dev/null
-    fi
-    if ! api_up; then
-        msg "et-api did not start. Check: journalctl --user -u et-api"
-        exit 1
-    fi
-fi
-
-# ── 3. The map ─────────────────────────────────────────────
+{{ hamradio_bin_dir }}/et-api-start || exit 1
 exec /usr/bin/et-predict-app "$@" > /dev/null 2>&1

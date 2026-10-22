@@ -1,0 +1,20 @@
+---
+# roles/aircraft/defaults/main.yml
+# et-aircraft: track aircraft by their ADS-B broadcasts on 1090 MHz
+#
+# How the pieces connect:
+#   RTL-SDR dongle (V3 works with Mint's stock driver)
+#     -> dump1090 (decodes ADS-B, serves data on port 1090)
+#       -> et-aircraft-app (map GUI)
+#          also asks et-api (port 1981) for FAA registration details
+#
+# Versions match EmComm Tools Community R6.
+
+et_aircraft_app_version: "1.1.1"
+et_aircraft_app_url: "https://github.com/thetechprepper/et-aircraft-app/releases/download/{{ et_aircraft_app_version }}/et-aircraft-app_{{ et_aircraft_app_version }}_amd64.deb"
+
+# EmComm Tools fork of dump1090, pinned to a known commit
+dump1090_commit: "8efb354f7bb61a255a81bf8936620775cf1a00f3"
+dump1090_repo: "https://github.com/thetechprepper/dump1090.git"
+dump1090_src_dir: /opt/src/dump1090
+dump1090_data_dir: "{{ radio_user_home }}/.local/share/emcomm-tools/dump1090"

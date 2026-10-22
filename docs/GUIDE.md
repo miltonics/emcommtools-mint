@@ -17,7 +17,9 @@ Linux Mint
        ├─ js8call, wsjtx, pat,    the radio programs
        │  ardop, fldigi, ...
        ├─ trusdx                  truSDX USB driver, runs as a background service
+       ├─ etapi                   shared lookup service (callsigns, aircraft, grid)
        ├─ voacap, predict         HF propagation map (et-predict)
+       ├─ aircraft                aircraft tracker (et-aircraft, needs RTL-SDR)
        ├─ glue                    the et-* helper commands
        └─ launcher                Start Radio / Stop Radio desktop icons
 ```
@@ -48,7 +50,7 @@ After it finishes:
 
 ### What install-basic.sh includes
 
-`base, audio, hamlib, ardop, wsjtx, js8call, pat, voacap, predict, trusdx, glue, launcher`
+`base, audio, hamlib, ardop, wsjtx, js8call, pat, voacap, predict, aircraft, trusdx, glue, launcher`
 
 It skips packet/BBS (linbpq, paracon, chattervox), APRS (yaac), SDR (sdrpp), Kiwix (offline Wikipedia, a very large download), and the conky desktop widget. You can add any of these later (see "Installing or updating one piece").
 
@@ -117,6 +119,22 @@ The prediction service runs in the background after you log in. To check it: `sy
 
 ---
 
+## Aircraft tracking (et-aircraft)
+
+Plug in the RTL-SDR (with its antenna) and the Aircraft Tracker shows planes near you on a map, using the ADS-B position reports they broadcast on 1090 MHz. Click a plane to see its registration (tail number, make, model, owner) from an offline copy of the FAA registry. Range depends on the antenna, typically 50 to 150 miles with a clear view of the sky.
+
+| How to open it | What it does |
+|---|---|
+| **Aircraft Tracker** icon on the desktop (or in the menu) | Checks the dongle is plugged in, starts the lookup service and dump1090, then opens the map. Closing the map stops dump1090 so the dongle is free for other SDR software. |
+| `et-aircraft` | Same thing from a terminal. |
+| http://localhost:1090 | dump1090's own simple map, in a browser, while the tracker is running. |
+
+Only one program can use the RTL-SDR at a time. Close SDR++ or anything else using it first.
+
+The install also stops Linux from treating the RTL-SDR as a TV tuner. If the tracker says dump1090 couldn't open the dongle right after installing, unplug and replug it once.
+
+---
+
 ## The et-* commands
 
 These are short commands installed in `/usr/local/bin`, so they work from any folder.
@@ -132,6 +150,8 @@ These are short commands installed in `/usr/local/bin`, so they work from any fo
 | `et-kill-all` | Stops all radio services. Use it when things are tangled and you want a clean slate. |
 | `et-predict` | Opens the HF propagation map (see above). |
 | `et-voacap` | Text-only HF prediction (see above). |
+| `et-aircraft` | Opens the aircraft tracker (see above). |
+| `et-api-start` | Starts the background lookup service and copies your grid from `et-user` to it. The app icons run this for you. |
 | `et-time` | Shows clock sync status. FT8 and JS8 need the clock to be within about a second. |
 | `et-user-backup` | Saves your settings (identity, Pat/Winlink mail, WSJT-X, Fldigi) to a `.tar.gz` file in your home folder. |
 | `et-user-restore <file>` | Puts a backup made by `et-user-backup` back in place. |
@@ -163,7 +183,7 @@ ansible-playbook site.yml -K --tags js8call
 | `./install-basic.sh` | Re-runs the lean set. Safe to repeat any time. |
 
 Role names you can use with `--tags`:
-`base audio hamlib direwolf ardop wsjtx js8call fldigi pat linbpq paracon chattervox yaac sdrpp voacap predict kiwix trusdx glue launcher conky`
+`base audio hamlib direwolf ardop wsjtx js8call fldigi pat linbpq paracon chattervox yaac sdrpp voacap predict aircraft kiwix trusdx glue launcher conky`
 
 **Upgrading JS8Call:** the playbook skips the download if `/usr/local/bin/js8call` already exists. To get a newer release:
 
@@ -211,6 +231,10 @@ git push
 | truSDX driver won't start | `et-trusdx log` shows why. Usually the radio isn't plugged in, or the USB port changed. `ls /dev/ttyTRUSDX` should exist when it's connected. |
 | truSDX audio missing in JS8Call | The driver runs as a background service and may not see your desktop's audio system. Note what `et-audio` shows and what `et-trusdx log` says, and it can be fixed in the trusdx role. |
 | No audio devices for the QMX | Run `et-audio` with the radio plugged in. The QMX shows up as "QMX Transceiver". |
+| Callsign search finds nothing for a valid callsign | The lookup index was probably built incompletely. Run `systemctl --user stop et-api`, then `rm -rf /opt/emcomm-tools-api/index/*`, then `systemctl --user start et-api`. Wait a full minute before searching. |
+| Aircraft Tracker says "No RTL-SDR found" | Check `lsusb` shows `0bda:2838`. Try another USB port. |
+| Aircraft Tracker says dump1090 could not open the RTL-SDR | Another program is using it, or the TV driver grabbed it. Close SDR software, unplug and replug the dongle, and try again. |
+| No planes appear | Give it a few minutes. Put the antenna near a window or outside. Check http://localhost:1090 to see whether dump1090 hears anything. |
 | HF Prediction says the service did not start | Run `journalctl --user -u et-api` to see why. Check `java -version` works. Then `systemctl --user restart et-api` and try again. |
 | et-voacap: "Sunspot number file not available" | Run the `fetch-ssn.sh` line from the et-predict section (needs internet). |
 | FT8 / JS8 decodes nothing | Run `et-time`. The clock may be off. |
@@ -234,6 +258,7 @@ git push
 | `/usr/local/bin/et-*` | The helper commands. |
 | `/opt/emcomm-tools-api/` | The prediction service and its offline data (FCC licenses, ZIP codes, Winlink stations). |
 | `~/.local/share/emcomm-tools/voacap/` | VOACAP scripts and the sunspot forecast (`ssn.txt`). |
+| `~/.local/share/emcomm-tools/dump1090/` | dump1090's working folder and web map page. |
 | `~/itshfbc/` | VOACAP's working folder. The last prediction is in `run/`. |
 
 ---

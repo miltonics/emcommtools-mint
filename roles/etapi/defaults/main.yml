@@ -1,0 +1,19 @@
+---
+# roles/etapi/defaults/main.yml
+# et-api: EmComm Tools local web service on port 1981.
+# Offline callsign lookup (FCC), aircraft registry (FAA), grid/ZIP to lat/lon,
+# Winlink RMS list, and VOACAP. Used by et-predict and et-aircraft.
+
+et_api_version: "1.3.0"
+et_api_base_url: "https://github.com/thetechprepper/et-api-java/releases/download/{{ et_api_version }}"
+et_api_dir: /opt/emcomm-tools-api
+et_api_data_files:
+  - faa.csv
+  - license.csv
+  - rmslist.csv
+  - zip2geo.csv
+  - zip2geo-elevation.csv
+
+# EmComm Tools helper scripts, pinned to a known commit
+etc_commit: "4ec08ce850b5610fcb6c5ac5dbf1a668a68ae9c8"
+etc_raw_url: "https://raw.githubusercontent.com/thetechprepper/emcomm-tools-os-community/{{ etc_commit }}/overlay"

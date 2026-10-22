@@ -1,0 +1,228 @@
+---
+# roles/aircraft/tasks/main.yml
+# Installs et-aircraft: RTL-SDR driver setup, dump1090, and et-aircraft-app.
+# et-api comes from the etapi role (pulled in automatically, see meta/main.yml).
+
+- name: Install RTL-SDR and dump1090 build dependencies
+  ansible.builtin.apt:
+    name:
+      - rtl-sdr
+      - librtlsdr-dev
+      - pkg-config
+      - build-essential
+      - usbutils            # lsusb, used to detect the dongle
+    state: present
+  tags: [aircraft]
+
+# --- Driver: keep Linux from claiming the dongle as a TV tuner ---------------
+
+- name: Stop the DVB-T TV driver from grabbing the RTL-SDR
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/blacklist-rtl-sdr.conf
+    content: |
+      # Managed by emcommtools-mint (roles/aircraft)
+      # The RTL-SDR is a TV tuner chip. These drivers would claim it for TV,
+      # which blocks dump1090 and SDR software from using it.
+      blacklist dvb_usb_rtl28xxu
+      blacklist rtl2832
+      blacklist rtl2832_sdr
+      blacklist rtl2830
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [aircraft]
+
+- name: Unload the TV driver now if it is loaded
+  ansible.builtin.command: modprobe -r dvb_usb_rtl28xxu rtl2832_sdr rtl2832 rtl2830
+  changed_when: false
+  failed_when: false
+  tags: [aircraft]
+
+- name: Give the RTL-SDR a fixed name (/dev/et-sdr)
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/99-et-sdr.rules
+    content: |
+      # Managed by emcommtools-mint (roles/aircraft)
+      # RTL-SDR Blog V3 / V4 and generic RTL2832U dongles
+      SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", \
+          GROUP="dialout", MODE="0660", SYMLINK+="et-sdr"
+      SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2832", \
+          GROUP="dialout", MODE="0660", SYMLINK+="et-sdr"
+    owner: root
+    group: root
+    mode: "0644"
+  register: sdr_udev
+  tags: [aircraft]
+
+- name: Reload udev rules
+  ansible.builtin.shell: udevadm control --reload-rules && udevadm trigger --subsystem-match=usb
+  when: sdr_udev.changed
+  failed_when: false
+  tags: [aircraft]
+
+# --- dump1090 ----------------------------------------------------------------
+
+- name: Check for dump1090
+  ansible.builtin.stat:
+    path: /usr/local/bin/dump1090
+  register: dump1090_bin
+  tags: [aircraft]
+
+- name: Download and build dump1090
+  when: not dump1090_bin.stat.exists
+  tags: [aircraft]
+  block:
+    - name: Download dump1090 source
+      ansible.builtin.git:
+        repo: "{{ dump1090_repo }}"
+        dest: "{{ dump1090_src_dir }}"
+        version: "{{ dump1090_commit }}"
+
+    - name: Build dump1090
+      community.general.make:
+        chdir: "{{ dump1090_src_dir }}"
+
+    - name: Install dump1090
+      ansible.builtin.copy:
+        src: "{{ dump1090_src_dir }}/dump1090"
+        dest: /usr/local/bin/dump1090
+        remote_src: true
+        mode: "0755"
+
+- name: Create dump1090 data folder
+  ansible.builtin.file:
+    path: "{{ dump1090_data_dir }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [aircraft]
+
+- name: Install dump1090 web map page
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/thetechprepper/dump1090/{{ dump1090_commit }}/gmap.html"
+    dest: "{{ dump1090_data_dir }}/gmap.html"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    force: false
+  tags: [aircraft]
+
+- name: Install dump1090 user service
+  ansible.builtin.copy:
+    dest: /etc/systemd/user/dump1090.service
+    content: |
+      # Managed by emcommtools-mint (roles/aircraft)
+      # Started and stopped by et-aircraft. Not started at login.
+      [Unit]
+      Description=dump1090 ADS-B decoder (RTL-SDR, data on port 1090)
+
+      [Service]
+      WorkingDirectory=%h/.local/share/emcomm-tools/dump1090
+      ExecStart=/usr/local/bin/dump1090 --net --net-http-port 1090
+      # dump1090 prints every decoded message; keep that out of the system log
+      StandardOutput=null
+      Restart=no
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [aircraft]
+
+# --- et-aircraft-app (the map GUI) ------------------------------------------
+
+- name: Check installed et-aircraft-app version
+  ansible.builtin.command: dpkg-query -W -f=${Version} et-aircraft-app
+  register: aircraft_app_installed
+  changed_when: false
+  failed_when: false
+  tags: [aircraft]
+
+- name: Download et-aircraft-app (about 160 MB)
+  ansible.builtin.get_url:
+    url: "{{ et_aircraft_app_url }}"
+    dest: "/tmp/et-aircraft-app_{{ et_aircraft_app_version }}_amd64.deb"
+    mode: "0644"
+    timeout: 600
+  when: aircraft_app_installed.stdout != et_aircraft_app_version
+  tags: [aircraft]
+
+- name: Install et-aircraft-app
+  ansible.builtin.apt:
+    deb: "/tmp/et-aircraft-app_{{ et_aircraft_app_version }}_amd64.deb"
+  when: aircraft_app_installed.stdout != et_aircraft_app_version
+  tags: [aircraft]
+
+# --- et-aircraft launcher ----------------------------------------------------
+
+- name: Install et-aircraft command
+  ansible.builtin.template:
+    src: et-aircraft.j2
+    dest: "{{ hamradio_bin_dir }}/et-aircraft"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [aircraft]
+
+- name: Install Aircraft Tracker menu entry
+  ansible.builtin.copy:
+    dest: /usr/share/applications/et-aircraft.desktop
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Aircraft Tracker
+      Comment=Track aircraft with an RTL-SDR (ADS-B, 1090 MHz)
+      Exec={{ hamradio_bin_dir }}/et-aircraft
+      Icon=et-aircraft-app
+      Terminal=false
+      Categories=HamRadio;
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [aircraft]
+
+- name: Find the desktop folder
+  ansible.builtin.command: xdg-user-dir DESKTOP
+  become: true
+  become_user: "{{ radio_user }}"
+  register: aircraft_desktop_dir
+  changed_when: false
+  failed_when: false
+  tags: [aircraft]
+
+- name: Set desktop path
+  ansible.builtin.set_fact:
+    aircraft_desktop: >-
+      {{ aircraft_desktop_dir.stdout
+         if (aircraft_desktop_dir.rc == 0 and aircraft_desktop_dir.stdout | length > 0
+             and aircraft_desktop_dir.stdout != radio_user_home)
+         else radio_user_home ~ '/Desktop' }}
+  tags: [aircraft]
+
+- name: Make sure the desktop folder exists
+  ansible.builtin.file:
+    path: "{{ aircraft_desktop }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [aircraft]
+
+- name: Put Aircraft Tracker icon on the desktop
+  ansible.builtin.copy:
+    src: /usr/share/applications/et-aircraft.desktop
+    remote_src: true
+    dest: "{{ aircraft_desktop }}/et-aircraft.desktop"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  register: aircraft_icon
+  tags: [aircraft]
+
+- name: Mark Aircraft Tracker icon as trusted (Cinnamon/Nemo)
+  ansible.builtin.command:
+    cmd: gio set "{{ aircraft_icon.dest }}" metadata::trusted true
+  become: true
+  become_user: "{{ radio_user }}"
+  changed_when: false
+  failed_when: false
+  tags: [aircraft]

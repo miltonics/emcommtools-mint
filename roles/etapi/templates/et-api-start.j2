@@ -1,0 +1,51 @@
+#!/bin/bash
+# et-api-start: make sure et-api is running and knows your location
+# Managed by emcommtools-mint (roles/etapi)
+# Used by et-predict and et-aircraft. Safe to run any time.
+
+STATE={{ hamradio_etc_dir }}/state
+USER_JSON="$HOME/.config/emcomm-tools/user.json"
+API="http://localhost:1981"
+
+msg() {
+    echo "[et-api] $*"
+    if [ ! -t 1 ] && command -v notify-send >/dev/null; then
+        notify-send "EmComm Tools" "$*"
+    fi
+}
+
+# Copy callsign and grid from et-user to where et-api looks for them
+CALLSIGN=$(grep '^CALLSIGN=' "$STATE" 2>/dev/null | cut -d= -f2 | tr -d '"')
+GRID=$(grep '^GRIDSQUARE=' "$STATE" 2>/dev/null | cut -d= -f2 | tr -d '"')
+if [ -z "$GRID" ]; then
+    msg "No grid square set. Run et-user first so maps start at your location."
+fi
+mkdir -p "$(dirname "$USER_JSON")"
+jq -n --arg c "${CALLSIGN:-N0CALL}" --arg g "${GRID:-AA00}" \
+    '{callsign: $c, grid: $g, winlinkPasswd: ""}' > "$USER_JSON"
+
+api_up() { curl -sf -o /dev/null "$API/api/geo/position"; }
+api_up && exit 0
+
+systemctl --user start et-api 2>/dev/null || \
+    (cd "$HOME" && nohup {{ et_api_dir }}/bin/et-api > /tmp/et-api.log 2>&1 &)
+
+wait_api() {
+    for _ in $(seq 1 60); do
+        api_up && return 0
+        sleep 2
+    done
+    return 1
+}
+if [ -t 1 ]; then
+    echo "[et-api] Starting..."
+    wait_api
+else
+    wait_api | zenity --progress --pulsate --auto-close --no-cancel \
+        --title="EmComm Tools" --text="Starting lookup service..." 2>/dev/null
+fi
+
+if ! api_up; then
+    msg "et-api did not start. Check: journalctl --user -u et-api"
+    exit 1
+fi

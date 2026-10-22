@@ -1,0 +1,133 @@
+---
+# roles/etapi/tasks/main.yml
+# Installs et-api (port 1981) and the et-api-start helper.
+# Pulled in automatically by the predict and aircraft roles.
+
+- name: Install et-api dependencies
+  ansible.builtin.apt:
+    name:
+      - openjdk-21-jre-headless
+      - jq
+      - curl
+      - zenity
+    state: present
+
+- name: Create et-api folders
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  loop:
+    - "{{ et_api_dir }}"
+    - "{{ et_api_dir }}/bin"
+    - "{{ et_api_dir }}/data"
+    - "{{ et_api_dir }}/index"
+
+- name: Download et-api
+  ansible.builtin.get_url:
+    url: "{{ et_api_base_url }}/emcomm-tools-api-{{ et_api_version }}.jar"
+    dest: "{{ et_api_dir }}/bin/et-api"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+    timeout: 300
+
+- name: Download et-api data (FCC licenses, FAA aircraft, grid/ZIP lookup, Winlink RMS list)
+  ansible.builtin.get_url:
+    url: "{{ et_api_base_url }}/{{ item }}"
+    dest: "{{ et_api_dir }}/data/{{ item }}"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    timeout: 300
+  loop: "{{ et_api_data_files }}"
+
+# et-api 1.3.0 refuses to start without this file, but the release does not
+# include it. An empty file just means no NWS weather-zone lookups.
+- name: Create placeholder weather-zone data file
+  ansible.builtin.copy:
+    dest: "{{ et_api_dir }}/data/weather-forecast-zone.csv"
+    content: ""
+    force: false
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+
+- name: Create EmComm Tools folders
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: /opt/emcomm-tools/bin, owner: root }
+    - { path: "{{ radio_user_home }}/.local/share/emcomm-tools", owner: "{{ radio_user }}" }
+    - { path: "{{ radio_user_home }}/.config/emcomm-tools", owner: "{{ radio_user }}" }
+
+- name: Install et-common (shared EmComm Tools functions)
+  ansible.builtin.get_url:
+    url: "{{ etc_raw_url }}/opt/emcomm-tools/bin/et-common"
+    dest: /opt/emcomm-tools/bin/et-common
+    owner: root
+    group: root
+    mode: "0755"
+
+# et-api builds its search indexes on first start. If anything searches while
+# that is still running, it can leave a half-built index and never rebuild it.
+# Building them here, before any app can search, avoids that.
+- name: Build et-api search indexes (first install only, takes about a minute)
+  ansible.builtin.shell: |
+    cd "$HOME"
+    LOG=$(mktemp)
+    {{ et_api_dir }}/bin/et-api > "$LOG" 2>&1 &
+    PID=$!
+    for i in $(seq 1 150); do
+      n=$(grep -cE "Finished creating index|already exists. Skipping" "$LOG")
+      [ "$n" -ge 5 ] && break
+      kill -0 $PID 2>/dev/null || break
+      sleep 2
+    done
+    kill $PID 2>/dev/null
+    wait $PID 2>/dev/null
+    n=$(grep -cE "Finished creating index|already exists. Skipping" "$LOG")
+    rm -f "$LOG"
+    [ "$n" -ge 5 ]
+  args:
+    creates: "{{ et_api_dir }}/index/weather-forecast-zone"
+  become: true
+  become_user: "{{ radio_user }}"
+
+- name: Install et-api user service
+  ansible.builtin.copy:
+    dest: /etc/systemd/user/et-api.service
+    content: |
+      # Managed by emcommtools-mint (roles/etapi)
+      [Unit]
+      Description=EmComm Tools API (lookups and VOACAP)
+
+      [Service]
+      ExecStart={{ et_api_dir }}/bin/et-api
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=default.target
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Start et-api automatically at login
+  ansible.builtin.command: systemctl --global enable et-api.service
+  args:
+    creates: /etc/systemd/user/default.target.wants/et-api.service
+
+- name: Install et-api-start helper
+  ansible.builtin.template:
+    src: et-api-start.j2
+    dest: "{{ hamradio_bin_dir }}/et-api-start"
+    owner: root
+    group: root
+    mode: "0755"

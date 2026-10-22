@@ -79,6 +79,10 @@
     - role: predict
       tags: [predict]
 
+    # --- Aircraft tracking (RTL-SDR + dump1090) ---
+    - role: aircraft
+      tags: [aircraft]
+
     - role: kiwix
       tags: [kiwix]
 

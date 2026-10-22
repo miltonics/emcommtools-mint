@@ -1,0 +1,32 @@
+#!/bin/bash
+# et-aircraft: track aircraft with an RTL-SDR
+# Managed by emcommtools-mint (roles/aircraft)
+#
+# 1. Checks the RTL-SDR is plugged in
+# 2. Starts et-api (aircraft registration lookups, your position)
+# 3. Starts dump1090 (decodes ADS-B from the dongle)
+# 4. Opens et-aircraft-app, and stops dump1090 when you close it
+
+msg() {
+    echo "[et-aircraft] $*"
+    if [ ! -t 1 ] && command -v notify-send >/dev/null; then
+        notify-send "Aircraft Tracker" "$*"
+    fi
+}
+
+if ! lsusb | grep -qiE "0bda:(2838|2832)"; then
+    msg "No RTL-SDR found. Plug in the dongle and try again."
+    exit 1
+fi
+
+{{ hamradio_bin_dir }}/et-api-start || exit 1
+
+systemctl --user restart dump1090
+sleep 2
+if ! systemctl --user is-active --quiet dump1090; then
+    msg "dump1090 could not open the RTL-SDR. Unplug and replug it, then try again. Details: journalctl --user -u dump1090"
+    exit 1
+fi
+
+trap 'systemctl --user stop dump1090' EXIT
+/usr/bin/et-aircraft-app "$@" > /dev/null 2>&1
