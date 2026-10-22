@@ -42,11 +42,18 @@
   become_user: "{{ radio_user }}"
   tags: [launcher]
 
-- name: Create js8-tracker venv and install requirements
+- name: Create js8-tracker venv
+  ansible.builtin.command:
+    cmd: python3 -m venv "{{ js8tracker_dir }}/venv"
+    creates: "{{ js8tracker_dir }}/venv/bin/pip"
+  become: true
+  become_user: "{{ radio_user }}"
+  tags: [launcher]
+
+- name: Install js8-tracker requirements into venv
   ansible.builtin.pip:
     requirements: "{{ js8tracker_dir }}/requirements.txt"
     virtualenv: "{{ js8tracker_dir }}/venv"
-    virtualenv_command: python3 -m venv
   become: true
   become_user: "{{ radio_user }}"
   tags: [launcher]
