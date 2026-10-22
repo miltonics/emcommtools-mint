@@ -231,6 +231,8 @@ hamradio-mint-setup/
 - [ ] Bluetooth TNC radios (BTech UV Pro, VR-N76, TH-D74) not yet implemented
 - [x] `et-predict` ported (HF propagation map, see docs/GUIDE.md)
 - [ ] `et-aircraft` app not yet ported
+- [ ] Offline map tiles for et-predict (mbtileserver on port 1982, US/world .mbtiles from ETC)
+- [ ] Fix ansible_env deprecation in group_vars/all.yml before Ansible 2.24
 - [ ] SDR++ `build` method not yet scripted (use PPA for now)
 - [ ] GPS chrony integration needs testing with real hardware
 
