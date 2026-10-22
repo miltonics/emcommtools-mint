@@ -76,6 +76,9 @@
     - role: voacap
       tags: [voacap]
 
+    - role: predict
+      tags: [predict]
+
     - role: kiwix
       tags: [kiwix]
 

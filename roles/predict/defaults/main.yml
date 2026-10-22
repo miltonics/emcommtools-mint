@@ -1,0 +1,29 @@
+---
+# roles/predict/defaults/main.yml
+# et-predict: offline HF propagation prediction (EmComm Tools et-predict-app)
+#
+# How the pieces connect:
+#   et-predict-app (map GUI)
+#     -> et-api (local web service on port 1981, needs Java)
+#       -> /opt/emcomm-tools/bin/et-voacap (script)
+#         -> voacapl (the VOACAP engine, built by the voacap role)
+#
+# Versions match EmComm Tools Community R6.
+
+et_predict_app_version: "1.5.2"
+et_predict_app_url: "https://github.com/thetechprepper/et-predict-app/releases/download/{{ et_predict_app_version }}/et-predict-app_{{ et_predict_app_version }}_amd64.deb"
+
+et_api_version: "1.3.0"
+et_api_base_url: "https://github.com/thetechprepper/et-api-java/releases/download/{{ et_api_version }}"
+et_api_dir: /opt/emcomm-tools-api
+et_api_data_files:
+  - faa.csv
+  - license.csv
+  - rmslist.csv
+  - zip2geo.csv
+  - zip2geo-elevation.csv
+
+# VOACAP helper scripts come from the EmComm Tools repo, pinned to a known commit
+etc_commit: "4ec08ce850b5610fcb6c5ac5dbf1a668a68ae9c8"
+etc_raw_url: "https://raw.githubusercontent.com/thetechprepper/emcomm-tools-os-community/{{ etc_commit }}/overlay"
+etc_voacap_dir: "{{ radio_user_home }}/.local/share/emcomm-tools/voacap"

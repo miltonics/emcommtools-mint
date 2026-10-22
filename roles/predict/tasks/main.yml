@@ -1,0 +1,250 @@
+---
+# roles/predict/tasks/main.yml
+# Installs et-predict (offline HF propagation map) and the et-api service it needs.
+# Requires the voacap role (voacapl engine and ~/itshfbc).
+
+- name: Install et-predict dependencies
+  ansible.builtin.apt:
+    name:
+      - openjdk-21-jre-headless   # runs et-api
+      - jq
+      - bc
+      - perl
+      - curl
+      - zenity
+    state: present
+  tags: [predict]
+
+# --- et-predict-app (the map GUI) -----------------------------------------
+
+- name: Check installed et-predict-app version
+  ansible.builtin.command: dpkg-query -W -f=${Version} et-predict-app
+  register: predict_app_installed
+  changed_when: false
+  failed_when: false
+  tags: [predict]
+
+- name: Download et-predict-app (about 160 MB)
+  ansible.builtin.get_url:
+    url: "{{ et_predict_app_url }}"
+    dest: "/tmp/et-predict-app_{{ et_predict_app_version }}_amd64.deb"
+    mode: "0644"
+    timeout: 600
+  when: predict_app_installed.stdout != et_predict_app_version
+  tags: [predict]
+
+- name: Install et-predict-app
+  ansible.builtin.apt:
+    deb: "/tmp/et-predict-app_{{ et_predict_app_version }}_amd64.deb"
+  when: predict_app_installed.stdout != et_predict_app_version
+  tags: [predict]
+
+# --- et-api (local lookup + VOACAP service on port 1981) --------------------
+
+- name: Create et-api folders
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  loop:
+    - "{{ et_api_dir }}"
+    - "{{ et_api_dir }}/bin"
+    - "{{ et_api_dir }}/data"
+    - "{{ et_api_dir }}/index"
+  tags: [predict]
+
+- name: Download et-api
+  ansible.builtin.get_url:
+    url: "{{ et_api_base_url }}/emcomm-tools-api-{{ et_api_version }}.jar"
+    dest: "{{ et_api_dir }}/bin/et-api"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+    timeout: 300
+  tags: [predict]
+
+- name: Download et-api data (FCC licenses, grid/ZIP lookup, Winlink RMS list)
+  ansible.builtin.get_url:
+    url: "{{ et_api_base_url }}/{{ item }}"
+    dest: "{{ et_api_dir }}/data/{{ item }}"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+    timeout: 300
+  loop: "{{ et_api_data_files }}"
+  tags: [predict]
+
+# et-api 1.3.0 refuses to start without this file, but the release does not
+# include it. An empty file just means no NWS weather-zone lookups.
+- name: Create placeholder weather-zone data file
+  ansible.builtin.copy:
+    dest: "{{ et_api_dir }}/data/weather-forecast-zone.csv"
+    content: ""
+    force: false
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0644"
+  tags: [predict]
+
+- name: Install et-api user service
+  ansible.builtin.copy:
+    dest: /etc/systemd/user/et-api.service
+    content: |
+      # Managed by emcommtools-mint (roles/predict)
+      [Unit]
+      Description=EmComm Tools API (lookups and VOACAP for et-predict)
+
+      [Service]
+      ExecStart={{ et_api_dir }}/bin/et-api
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=default.target
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [predict]
+
+- name: Start et-api automatically at login
+  ansible.builtin.command: systemctl --global enable et-api.service
+  args:
+    creates: /etc/systemd/user/default.target.wants/et-api.service
+  tags: [predict]
+
+# --- VOACAP helper scripts (called by et-api) -------------------------------
+
+- name: Create EmComm Tools folders
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: /opt/emcomm-tools/bin, owner: root }
+    - { path: "{{ radio_user_home }}/.local/share/emcomm-tools", owner: "{{ radio_user }}" }
+    - { path: "{{ etc_voacap_dir }}", owner: "{{ radio_user }}" }
+    - { path: "{{ radio_user_home }}/.config/emcomm-tools", owner: "{{ radio_user }}" }
+  tags: [predict]
+
+- name: Install et-common and et-voacap (paths are fixed inside et-api)
+  ansible.builtin.get_url:
+    url: "{{ etc_raw_url }}/opt/emcomm-tools/bin/{{ item }}"
+    dest: "/opt/emcomm-tools/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - et-common
+    - et-voacap
+  tags: [predict]
+
+- name: Make et-voacap available as a command
+  ansible.builtin.file:
+    src: /opt/emcomm-tools/bin/et-voacap
+    dest: "{{ hamradio_bin_dir }}/et-voacap"
+    state: link
+  tags: [predict]
+
+- name: Install VOACAP scripts and sunspot data
+  ansible.builtin.get_url:
+    url: "{{ etc_raw_url }}/etc/skel/.local/share/emcomm-tools/voacap/{{ item.name }}"
+    dest: "{{ etc_voacap_dir }}/{{ item.name }}"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "{{ item.mode }}"
+    force: "{{ item.name != 'ssn.txt' }}"
+  loop:
+    - { name: et-voacap.sh, mode: "0755" }
+    - { name: rel.pl, mode: "0755" }
+    - { name: fetch-ssn.sh, mode: "0755" }
+    - { name: ssn.txt, mode: "0644" }
+  tags: [predict]
+
+- name: Refresh sunspot forecast (skipped quietly if offline)
+  ansible.builtin.command:
+    cmd: ./fetch-ssn.sh
+    chdir: "{{ etc_voacap_dir }}"
+  become: true
+  become_user: "{{ radio_user }}"
+  changed_when: false
+  failed_when: false
+  tags: [predict]
+
+# --- et-predict launcher -----------------------------------------------------
+
+- name: Install et-predict command
+  ansible.builtin.template:
+    src: et-predict.j2
+    dest: "{{ hamradio_bin_dir }}/et-predict"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [predict]
+
+- name: Install HF Prediction menu entry
+  ansible.builtin.copy:
+    dest: /usr/share/applications/et-predict.desktop
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=HF Prediction
+      Comment=Offline HF propagation map (VOACAP)
+      Exec={{ hamradio_bin_dir }}/et-predict
+      Icon=et-predict-app
+      Terminal=false
+      Categories=HamRadio;
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [predict]
+
+- name: Find the desktop folder
+  ansible.builtin.command: xdg-user-dir DESKTOP
+  become: true
+  become_user: "{{ radio_user }}"
+  register: predict_desktop_dir
+  changed_when: false
+  failed_when: false
+  tags: [predict]
+
+- name: Set desktop path
+  ansible.builtin.set_fact:
+    predict_desktop: >-
+      {{ predict_desktop_dir.stdout
+         if (predict_desktop_dir.rc == 0 and predict_desktop_dir.stdout | length > 0
+             and predict_desktop_dir.stdout != radio_user_home)
+         else radio_user_home ~ '/Desktop' }}
+  tags: [predict]
+
+- name: Make sure the desktop folder exists
+  ansible.builtin.file:
+    path: "{{ predict_desktop }}"
+    state: directory
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  tags: [predict]
+
+- name: Put HF Prediction icon on the desktop
+  ansible.builtin.copy:
+    src: /usr/share/applications/et-predict.desktop
+    remote_src: true
+    dest: "{{ predict_desktop }}/et-predict.desktop"
+    owner: "{{ radio_user }}"
+    group: "{{ radio_user }}"
+    mode: "0755"
+  register: predict_icon
+  tags: [predict]
+
+- name: Mark HF Prediction icon as trusted (Cinnamon/Nemo)
+  ansible.builtin.command:
+    cmd: gio set "{{ predict_icon.dest }}" metadata::trusted true
+  become: true
+  become_user: "{{ radio_user }}"
+  changed_when: false
+  failed_when: false
+  tags: [predict]

@@ -229,7 +229,8 @@ hamradio-mint-setup/
 - [ ] Navit offline maps (US state selection) not yet automated
 - [ ] VARA FM/HF Wine integration not automated (manual, same as ETC)
 - [ ] Bluetooth TNC radios (BTech UV Pro, VR-N76, TH-D74) not yet implemented
-- [ ] `et-aircraft` and `et-predict` apps not yet ported
+- [x] `et-predict` ported (HF propagation map, see docs/GUIDE.md)
+- [ ] `et-aircraft` app not yet ported
 - [ ] SDR++ `build` method not yet scripted (use PPA for now)
 - [ ] GPS chrony integration needs testing with real hardware
 
