@@ -12,4 +12,4 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 exec "$SCRIPT_DIR/bootstrap.sh" \
-  --tags "base,audio,hamlib,ardop,wsjtx,js8call,pat,voacap,predict,aircraft,trusdx,glue,launcher" "$@"
+  --tags "base,audio,hamlib,ardop,wsjtx,js8call,pat,voacap,predict,aircraft,trusdx,glue" "$@"
