@@ -1,0 +1,127 @@
+---
+# roles/mercury/tasks/main.yml
+# Mercury (Rhizomatica / HERMES): open-source HF modem with a VARA-style
+# TNC interface. Pat drives it through its "varahf" transport, so it gives
+# Winlink over HF without Wine or a VARA licence. Both ends must run Mercury
+# (gateways list themselves with service code MERCURY).
+# Built from source: upstream ships no Linux amd64 package.
+
+- name: Install Mercury build dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - pkg-config
+      - make
+      - git
+      - libasound2-dev
+      - libpulse-dev
+      - libhamlib-dev
+    state: present
+  when: mercury_install
+  tags: [mercury]
+
+- name: Check installed Mercury version
+  ansible.builtin.command: /usr/local/bin/mercury -V
+  register: mercury_installed
+  changed_when: false
+  failed_when: false
+  when: mercury_install
+  tags: [mercury]
+
+- name: Decide whether Mercury needs building
+  ansible.builtin.set_fact:
+    mercury_needs_build: >-
+      {{ mercury_install and
+         (mercury_installed.rc | default(1) != 0
+          or ('Version ' ~ (mercury_version | regex_replace('^v', '')) ~ ' ')
+             not in (mercury_installed.stdout | default(''))) }}
+  tags: [mercury]
+
+- name: Fetch Mercury source ({{ mercury_version }})
+  ansible.builtin.git:
+    repo: "{{ mercury_repo_url }}"
+    dest: "{{ mercury_src_dir }}"
+    version: "{{ mercury_version }}"
+    depth: 1
+    force: true
+  when: mercury_needs_build
+  tags: [mercury]
+
+- name: Build Mercury (a few minutes)
+  ansible.builtin.shell:
+    cmd: "make clean >/dev/null 2>&1; make -j{{ ansible_facts['processor_vcpus'] | default(2) }}"
+    chdir: "{{ mercury_src_dir }}"
+  when: mercury_needs_build
+  changed_when: true
+  tags: [mercury]
+
+- name: Install the mercury binary
+  ansible.builtin.copy:
+    src: "{{ mercury_src_dir }}/mercury"
+    dest: /usr/local/bin/mercury
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when: mercury_needs_build
+  tags: [mercury]
+
+- name: Install start-mercury (builds the modem settings from et-radio's state)
+  ansible.builtin.template:
+    src: start-mercury.j2
+    dest: /usr/local/bin/start-mercury
+    owner: root
+    group: root
+    mode: "0755"
+  when: mercury_install
+  tags: [mercury]
+
+- name: Install mercury systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/mercury.service
+    content: |
+      [Unit]
+      Description=Mercury HF modem (VARA-style TNC on port {{ mercury_tcp_port }})
+      After=sound.target
+
+      [Service]
+      Type=simple
+      User={{ radio_user }}
+      ExecStart=/usr/local/bin/start-mercury
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  when: mercury_install
+  notify: Reload systemd
+  tags: [mercury]
+
+- name: Write Mercury notes
+  ansible.builtin.copy:
+    dest: "{{ hamradio_lib_dir }}/MERCURY_NOTES.md"
+    content: |
+      # Mercury Notes
+      Mercury {{ mercury_version }}, built from {{ mercury_repo_url }} in {{ mercury_src_dir }}.
+
+      - Start it with et-mode ("Winlink: HF Mercury"). Not started at boot.
+      - Both stations must run Mercury 1.9.20 or newer. It does not talk to VARA or ARDOP.
+      - Find gateways: winlink.org/RMSChannels, pick VARA, service code MERCURY.
+        Pat lists them with: pat rmslist -m varahf   (needs internet once;
+        et-winlink already adds MERCURY to Pat's service codes)
+      - Connect:  pat connect "varahf:///<GATEWAY>?freq=<dial kHz>"
+      - Radio in USB (upper sideband), filter at least 2.4 kHz wide.
+      - QMX/QDX: transmit is limited to the slow MFSK mode by default.
+        See the comments in /usr/local/bin/start-mercury.
+      - Check keying without transmitting data:
+          mercury -C ~/.config/mercury/et-mercury.ini -Q     (keys for one second)
+      - List sound cards as Mercury sees them:  mercury -z
+      - Log:  journalctl -u mercury -f
+      - Upgrade: change mercury_version in group_vars/all.yml, then
+          ansible-playbook site.yml -K --tags mercury
+    mode: "0644"
+  when: mercury_install
+  tags: [mercury]

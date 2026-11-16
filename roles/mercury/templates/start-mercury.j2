@@ -1,0 +1,89 @@
+#!/bin/bash
+# start-mercury: build Mercury's settings from /etc/hamradio/state and run it
+# Managed by emcommtools-mint (roles/mercury). Started by mercury.service.
+#
+# Audio:  the sound card picked in et-radio (ALSA, through "plughw" so
+#         Mercury's 8 kHz audio is resampled for the radio).
+# Keying: through rig control (rigctld on port 4532) when it is running,
+#         so Mercury and JS8Call/WSJT-X never fight over the serial port.
+#         With no rig control Mercury does not key; use VOX.
+# TNC:    VARA-style, control port {{ mercury_tcp_port }}, data port {{ mercury_tcp_port + 1 }}. Pat's "varahf"
+#         transport talks to it.
+#
+# Extra settings in /etc/hamradio/state (optional):
+#   MERCURY_MFSK_ONLY=true|false   transmit only the constant-tone MFSK mode.
+#                                  Default: true for QMX/QDX (see below).
+#   MERCURY_TX_GAIN_DB=0.0         transmit audio level trim, -20 to +20
+
+STATE={{ hamradio_etc_dir }}/state
+PORT={{ mercury_tcp_port }}
+{% raw %}
+# shellcheck disable=SC1090
+[ -r "$STATE" ] && source "$STATE"
+
+plug() {   # hw:2,0 -> plughw:2,0 ; anything else unchanged
+  case "$1" in
+    hw:*) echo "plug$1" ;;
+    *)    echo "$1" ;;
+  esac
+}
+
+IN_DEV=$(plug "${RADIO_AUDIO_CAPTURE:-none}")
+OUT_DEV=$(plug "${RADIO_AUDIO:-none}")
+if [ "$IN_DEV" = "none" ] || [ "$OUT_DEV" = "none" ]; then
+  echo "start-mercury: no radio audio device set. Run et-radio first." >&2
+  exit 1
+fi
+
+# Keying
+PTT_METHOD="none"; PTT_DEVICE=""; PTT_MODEL="-1"
+if [ -n "$RADIO_MODEL" ] && systemctl is-active --quiet "rigctld@${RADIO_MODEL}" 2>/dev/null; then
+  PTT_METHOD="hamlib"; PTT_DEVICE="127.0.0.1:4532"; PTT_MODEL="2"   # 2 = Hamlib NET rigctl
+fi
+
+# The QMX and QDX in their digital mode can only send one tone at a time.
+# Mercury's faster modes are multi-carrier (OFDM) and would come out garbled,
+# so default those radios to MFSK-only transmit. Receive is not limited.
+# If your QMX+ has the SSB firmware and is in USB mode, set
+# MERCURY_MFSK_ONLY=false in /etc/hamradio/state for full speed.
+if [ -z "$MERCURY_MFSK_ONLY" ]; then
+  case "$RADIO" in
+    *QMX*|*QDX*) MERCURY_MFSK_ONLY=true ;;
+    *)           MERCURY_MFSK_ONLY=false ;;
+  esac
+fi
+
+INI_DIR="${HOME}/.config/mercury"
+INI="${INI_DIR}/et-mercury.ini"
+mkdir -p "$INI_DIR"
+cat > "$INI" <<INI
+; Written by start-mercury every time the modem starts. Do not edit:
+; change /etc/hamradio/state (et-radio, et-user) instead.
+[main]
+ui_enabled = false
+input_device = ${IN_DEV}
+output_device = ${OUT_DEV}
+capture_channel = left
+sound_system = alsa
+arq_tcp_base_port = ${PORT}
+callsign = ${CALLSIGN}
+verbose = false
+
+[ptt]
+method = ${PTT_METHOD}
+device = ${PTT_DEVICE}
+hamlib_model = ${PTT_MODEL}
+
+[audio]
+tx_gain_db = ${MERCURY_TX_GAIN_DB:-0.0}
+
+[arq]
+mfsk_tx_only = ${MERCURY_MFSK_ONLY}
+
+[channel]
+busy_detect = false
+INI
+
+echo "start-mercury: audio in=${IN_DEV} out=${OUT_DEV} ptt=${PTT_METHOD} mfsk_tx_only=${MERCURY_MFSK_ONLY}"
+exec /usr/local/bin/mercury -C "$INI"
+{% endraw %}
