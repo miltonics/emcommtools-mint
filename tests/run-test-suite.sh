@@ -44,6 +44,7 @@ check_bin voacapl
 check_bin sdrpp
 check_bin mercury
 check_bin jq
+check_bin linbpq
 
 if command -v js8call >/dev/null 2>&1 || [ -x "/usr/local/bin/js8call" ]; then
   pass "js8call executable"
@@ -54,7 +55,7 @@ fi
 # ── et-* commands ─────────────────────────────────────────────────────────────
 section "et-* Commands"
 
-for cmd in et-user et-radio et-mode et-info et-time et-trusdx et-winlink et-uv-pro et-kill-bt start-mercury; do
+for cmd in et-user et-radio et-mode et-info et-time et-trusdx et-winlink et-uv-pro et-kill-bt start-mercury et-bbs-server et-paracon; do
   if [ -x "/usr/local/bin/$cmd" ]; then
     pass "$cmd installed"
   else
@@ -124,7 +125,7 @@ check_config "$RADIO_HOME/.config/WSJT-X.ini"          "WSJT-X"
 check_config "/etc/hamradio/direwolf/direwolf.conf"    "Direwolf"
 check_config "$RADIO_HOME/linbpq/bpq32.cfg"           "LinBPQ"
 check_config "$RADIO_HOME/.config/pat/config.json"    "Pat"
-check_config "$RADIO_HOME/.config/paracon/paracon.ini" "Paracon"
+check_config "$RADIO_HOME/.config/paracon/paracon.cfg" "Paracon"
 
 # ── Systemd services ──────────────────────────────────────────────────────────
 section "Systemd Services"

@@ -80,6 +80,8 @@ These are the only commands you need to operate:
 | `et-mode` | Choose operating mode (JS8Call, WSJT-X, Winlink, APRS, etc.) |
 | `et-winlink` | Point Pat (Winlink) at UV-PRO, Mercury, ARDOP, packet or telnet |
 | `et-uv-pro` | Pair / connect the BTECH UV-PRO over Bluetooth |
+| `et-paracon` | Packet BBS client (UV-PRO or Direwolf) |
+| `et-bbs-server` | Your own packet node and BBS (LinBPQ) |
 | `et-info` | Show current system status (callsign, radio, mode, CAT) |
 | `et-time` | Show GPS/NTP time sync status |
 | `et-audio` | List available audio devices |
@@ -146,8 +148,8 @@ Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio
 | WSJT-X (FT8 / FT4) | WSJT-X (auto-configured callsign, grid, CAT + audio) |
 | Fldigi | fldigi (+ flmsg, flamp) |
 | APRS Client | Direwolf TNC → YAAC |
-| BBS Client | Direwolf TNC → Paracon |
-| BBS Server | Direwolf TNC → LinBPQ node |
+| BBS Client | UV-PRO (through LinBPQ) or Direwolf TNC → Paracon |
+| BBS Server | UV-PRO Bluetooth or Direwolf TNC → LinBPQ node |
 | Chat | Direwolf TNC → Chattervox |
 | APRS Digipeater | Direwolf (SSID -4) |
 | Packet Digipeater | Direwolf (SSID -2) |
@@ -170,7 +172,7 @@ Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio
 | Pat (Winlink) | GitHub release |
 | ardopc | ardopcf (pflarue) GitHub release |
 | Mercury | Rhizomatica, built from source |
-| LinBPQ | G8BPQ binary |
+| LinBPQ | G8BPQ, built from source (github.com/g8bpq/linbpq) |
 | Paracon | GitHub release (.pyz zipapp, no deb) |
 | Chattervox | npm |
 | YAAC | ka2ddo.org |
@@ -199,9 +201,9 @@ hamradio-mint-setup/
 │   ├── fldigi/           # fldigi + flmsg + flamp
 │   ├── pat/              # Winlink client + et-winlink
 │   ├── uvpro/            # BTECH UV-PRO Bluetooth KISS TNC (et-uv-pro)
+│   ├── linbpq/           # Packet node + BBS (et-bbs-server)
+│   ├── paracon/          # Packet BBS client (et-paracon)
 │   ├── mercury/          # Mercury HF modem
-│   ├── linbpq/           # Packet node/BBS
-│   ├── paracon/          # Packet terminal client
 │   ├── chattervox/       # AX.25 chat
 │   ├── yaac/             # APRS client
 │   ├── sdrpp/            # SDR++
@@ -237,6 +239,7 @@ hamradio-mint-setup/
 - [ ] VARA FM/HF Wine integration not automated (manual, same as ETC)
 - [x] BTECH UV-PRO Bluetooth TNC (`et-uv-pro`, see docs/GUIDE.md); needs on-air test
 - [x] Mercury HF modem + Pat (`et-winlink mercury`); needs on-air test
+- [x] Packet BBS client (Paracon) and own node/BBS (LinBPQ, built 64-bit from source), UV-PRO or Direwolf; needs on-air test
 - [ ] Other Bluetooth TNC radios (VR-N76, TH-D74) not yet implemented
 - [ ] Radio picker for Start Radio (roles/launcher is disabled; ~/radio is hand-managed)
 - [ ] Direwolf MYCALL and PTT are not yet written by et-mode (sound card packet modes)

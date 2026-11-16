@@ -21,6 +21,8 @@ Linux Mint
        ├─ voacap, predict         HF propagation map (et-predict)
        ├─ aircraft                aircraft tracker (et-aircraft, needs RTL-SDR)
        ├─ uvpro                   BTECH UV-PRO over Bluetooth (et-uv-pro)
+       ├─ linbpq                  your own packet node and BBS (et-bbs-server)
+       ├─ paracon                 packet BBS client (et-paracon)
        ├─ mercury                 Mercury HF modem (Winlink over HF)
        └─ glue                    the et-* helper commands
 ```
@@ -51,9 +53,9 @@ After it finishes:
 
 ### What install-basic.sh includes
 
-`base, audio, hamlib, ardop, mercury, wsjtx, js8call, pat, uvpro, voacap, predict, aircraft, trusdx, glue`
+`base, audio, hamlib, ardop, mercury, wsjtx, js8call, pat, uvpro, linbpq, paracon, voacap, predict, aircraft, trusdx, glue`
 
-It skips packet/BBS (linbpq, paracon, chattervox), APRS (yaac), SDR (sdrpp), Kiwix (offline Wikipedia, a very large download), and the conky desktop widget. You can add any of these later (see "Installing or updating one piece").
+It skips chattervox, APRS (yaac), SDR (sdrpp), Kiwix (offline Wikipedia, a very large download), and the conky desktop widget. You can add any of these later (see "Installing or updating one piece").
 
 ---
 
@@ -185,6 +187,45 @@ Mercury is an open-source HF modem from the HERMES project. Pat drives it the sa
 
 ---
 
+## Packet BBS: client and your own node
+
+Two pieces, both reachable from `et-mode` (BBS Client, BBS Server) or directly. Each asks which radio to use: the **UV-PRO over Bluetooth** (default) or **sound card packet through Direwolf**.
+
+### Connect to other BBSs and nodes (Paracon)
+
+```bash
+et-paracon
+```
+
+Paracon opens in the terminal. Use Connect and enter the station, for example a node or BBS callsign. It also shows a monitor of all packets heard. Your callsign is filled in from `et-user`.
+
+Paracon only speaks AGWPE and the UV-PRO only speaks KISS, so on the UV-PRO path `et-paracon` starts your LinBPQ node first and Paracon talks to the radio through it. That is normal; it is how the pieces fit.
+
+### Run your own node and BBS (LinBPQ)
+
+```bash
+et-bbs-server start
+```
+
+| | |
+|---|---|
+| Node | `KE8SWO-7`. People connect to it over the air. |
+| BBS (mailbox) | `KE8SWO-11`, or type `BBS` once connected to the node. |
+| Chat | `KE8SWO-12`, or type `CHAT` on the node. |
+| Your own console | `telnet localhost 8010`, user `sysop` |
+| Web admin | http://localhost:8012, user `sysop` |
+| Sysop password | `~/linbpq/sysop-password` (made at first start; not your Winlink password) |
+
+`et-bbs-server stop` stops it. `et-bbs-server status` shows whether it is running.
+
+The config `~/linbpq/bpq32.cfg` is rewritten from your callsign and grid each start. To take it over by hand, delete its first line and it will be left alone. Mail and chat settings (`linmail.cfg`, `chatconfig.cfg`) are LinBPQ's own and are never touched.
+
+**One program at a time on the UV-PRO.** Winlink (`et-uv-pro connect winlink`) and the node both need the radio's Bluetooth link. Run `et-uv-pro disconnect` before switching. Stopping LinBPQ takes up to about 40 seconds, which is normal.
+
+**Running a node is transmitting unattended.** It IDs every 10 minutes and answers anyone who connects. Pick a frequency that local packet users agree on before leaving it running.
+
+---
+
 ## The et-* commands
 
 These are short commands installed in `/usr/local/bin`, so they work from any folder.
@@ -199,6 +240,8 @@ These are short commands installed in `/usr/local/bin`, so they work from any fo
 | `et-trusdx status` | Shows whether the truSDX driver is running. Also takes `start`, `stop`, `restart`, and `log` (live driver messages; press Ctrl+C to leave). |
 | `et-winlink <path>` | Points Pat (Winlink) at `uvpro`, `mercury`, `ardop`, `packet` or `telnet` and opens it. `et-winlink stop` closes it. |
 | `et-uv-pro` | Pairs and connects the BTECH UV-PRO over Bluetooth (see above). |
+| `et-paracon` | Packet BBS client. Asks UV-PRO or Direwolf. |
+| `et-bbs-server` | Your own packet node and BBS (LinBPQ): `start`, `stop`, `status`. |
 | `et-kill-all` | Stops all radio services, Pat, and any Bluetooth radio link. Use it when things are tangled and you want a clean slate. |
 | `et-predict` | Opens the HF propagation map (see above). |
 | `et-voacap` | Text-only HF prediction (see above). |
@@ -294,6 +337,8 @@ git push
 | `et-uv-pro connect` says the Bluetooth serial link did not come up | Phone Bluetooth off. Power-cycle the radio, wait 30 seconds, try again. Check KISS TNC is enabled on the radio. |
 | UV-PRO connects but the gateway never answers | Check the frequency and that squelch opens on the gateway's signal. Watch traffic with `sudo axlisten -a -tttt -c`. |
 | Pat says the Winlink account cannot be confirmed | Wrong or missing password. Run `et-user`, then `et-winlink config`. |
+| `et-bbs-server start` says LinBPQ did not come up | `journalctl -u linbpq -n 30`. On the UV-PRO path, check `et-uv-pro status` shows the serial link up. If you just stopped it, wait 40 seconds and try again. |
+| Paracon cannot connect to its server | The node or Direwolf is not running. Start Paracon with `et-paracon`, not `paracon`, so it starts them. |
 | Mercury starts then stops | `journalctl -u mercury -n 30`. Usually no radio sound card picked: run `et-radio` with the radio plugged in. |
 | Something tangled and you want to start over | `~/radio/stop_radio.sh`, then `et-kill-all`, then Start Radio again. |
 
@@ -314,6 +359,8 @@ git push
 | `/usr/local/bin/et-*` | The helper commands. |
 | `~/.config/pat/config.json` | Pat (Winlink) settings. `et-winlink` keeps callsign, password and transports current. |
 | `~/.local/share/pat/` | Winlink mailbox. |
+| `~/linbpq/` | LinBPQ: `bpq32.cfg`, mail and chat data, logs, `sysop-password`. |
+| `~/.config/paracon/paracon.cfg` | Paracon settings. |
 | `~/.config/hamradio/uvpro.conf` | The UV-PRO's Bluetooth address, saved by `et-uv-pro pair`. |
 | `~/.config/mercury/et-mercury.ini` | Mercury settings, rewritten at every start from `/etc/hamradio/state`. |
 | `/opt/emcomm-tools-api/` | The prediction service and its offline data (FCC licenses, ZIP codes, Winlink stations). |

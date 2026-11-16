@@ -1,53 +1,45 @@
 ---
 # roles/paracon/tasks/main.yml
-# Paracon: packet radio terminal by Martin Cooper KD6YAM.
-# Distributed as a self-contained Python .pyz zipapp — NOT a .deb.
+# Paracon: packet radio terminal (BBS client) by Martin Cooper KD6YAM.
+# A self-contained Python zipapp. It talks AGWPE, so it reaches the radio
+# through LinBPQ (UV-PRO path) or Direwolf (sound card path). et-paracon
+# sets that up and starts it.
 # Repo: https://github.com/mfncooper/paracon
-# Requires: Python 3.9+, running Direwolf (AGWPE on port 8000)
 
-- name: Ensure Python 3.9+ is available (Paracon requirement)
+- name: Install Python for Paracon
   ansible.builtin.apt:
     name: python3
     state: present
   tags: [paracon]
 
-- name: Check if Paracon already installed
-  ansible.builtin.stat:
-    path: "{{ hamradio_bin_dir }}/paracon"
-  register: paracon_stat
+- name: Check installed Paracon version
+  ansible.builtin.command: "python3 {{ hamradio_bin_dir }}/paracon --version"
+  register: paracon_installed
+  changed_when: false
+  failed_when: false
   tags: [paracon]
 
-- name: Get latest Paracon release info
-  ansible.builtin.uri:
-    url: https://api.github.com/repos/mfncooper/paracon/releases/latest
-    return_content: true
-    headers:
-      Accept: "application/vnd.github.v3+json"
-  register: paracon_release
-  when: not paracon_stat.stat.exists
-  tags: [paracon]
-
-- name: Set Paracon .pyz download URL
-  ansible.builtin.set_fact:
-    paracon_pyz_url: >-
-      {{ paracon_release.json.assets
-         | selectattr('name', 'search', '\.pyz$')
-         | map(attribute='browser_download_url')
-         | first }}
-  when: not paracon_stat.stat.exists
-  tags: [paracon]
-
-- name: Download Paracon .pyz
+- name: Download Paracon {{ paracon_version }}
   ansible.builtin.get_url:
-    url: "{{ paracon_pyz_url }}"
+    url: "https://github.com/mfncooper/paracon/releases/download/v{{ paracon_version }}/paracon_{{ paracon_version }}.pyz"
     dest: "{{ hamradio_bin_dir }}/paracon"
     mode: "0755"
     owner: root
     group: root
-  when: not paracon_stat.stat.exists
+    force: true
+  when: paracon_version not in (paracon_installed.stdout | default('') ~ paracon_installed.stderr | default(''))
   tags: [paracon]
 
-- name: Create Paracon config directory for user
+- name: Install et-paracon (point Paracon at the radio and start it)
+  ansible.builtin.template:
+    src: et-paracon.j2
+    dest: "{{ hamradio_bin_dir }}/et-paracon"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [paracon]
+
+- name: Create Paracon config directory
   ansible.builtin.file:
     path: "{{ radio_user_home }}/.config/paracon"
     state: directory
@@ -56,16 +48,39 @@
     mode: "0755"
   tags: [paracon]
 
-- name: Write Paracon baseline config
+- name: Remove the unused config left by older versions of this role
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/.config/paracon/paracon.ini"
+    state: absent
+  tags: [paracon]
+
+- name: Write a starting Paracon config
   ansible.builtin.copy:
-    dest: "{{ radio_user_home }}/.config/paracon/paracon.ini"
+    dest: "{{ radio_user_home }}/.config/paracon/paracon.cfg"
     content: |
-      [TNC]
-      # Direwolf AGWPE server
+      [Setup]
       host = localhost
       port = 8000
+      callsign = N0CALL
     owner: "{{ radio_user }}"
     group: "{{ radio_user }}"
     mode: "0644"
     force: false
+  tags: [paracon]
+
+- name: Add "Packet BBS client (Paracon)" to the app menu
+  ansible.builtin.copy:
+    dest: /usr/share/applications/et-paracon.desktop
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Packet BBS client (Paracon)
+      Comment=Connect to packet nodes and BBSs
+      Exec=et-paracon
+      Icon=utilities-terminal
+      Terminal=true
+      Categories=HamRadio;Network;
+    owner: root
+    group: root
+    mode: "0644"
   tags: [paracon]

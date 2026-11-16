@@ -37,7 +37,7 @@ MODES=(
 )
 
 # Modes that do not use the radio picked in et-radio
-RADIO_FREE_MODES=" 14 15 "
+RADIO_FREE_MODES=" 5 7 14 15 "
 
 echo ""
 echo "=== et-mode: Operating Mode ==="
@@ -158,10 +158,8 @@ case "$SEL" in
     nohup yaac >/dev/null 2>&1 &
     ;;
 
-  5) # Paracon
-    start_and_wait_for_service direwolf
-    echo "Starting Paracon..."
-    nohup paracon >/dev/null 2>&1 &
+  5) # Paracon (asks UV-PRO or Direwolf)
+    et-paracon
     ;;
 
   6) # QtTermTCP
@@ -170,10 +168,8 @@ case "$SEL" in
     nohup qttermtcp >/dev/null 2>&1 &
     ;;
 
-  7) # LinBPQ
-    start_and_wait_for_service direwolf
-    start_and_wait_for_service linbpq
-    echo "LinBPQ started. Web UI: http://localhost:8012"
+  7) # LinBPQ node + BBS (asks UV-PRO or Direwolf)
+    et-bbs-server start
     ;;
 
   8) # Chattervox
