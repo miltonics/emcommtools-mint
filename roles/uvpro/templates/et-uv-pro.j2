@@ -1,0 +1,330 @@
+#!/bin/bash
+# et-uv-pro: use the BTECH UV-PRO's built-in Bluetooth KISS TNC
+# Managed by emcommtools-mint (roles/uvpro)
+# Adapted from EmComm Tools Community's et-uv-pro (Gaston Gonzalez).
+#
+#   et-uv-pro pair               Pair the radio (once)
+#   et-uv-pro connect            Connect, then ask what to run
+#   et-uv-pro connect winlink    Connect and open Pat (Winlink) right away
+#   et-uv-pro connect axcall     Connect for a packet terminal (axcall)
+#   et-uv-pro connect serial     Connect only: leaves /dev/rfcomm0 free for
+#                                Reticulum or any other KISS program
+#   et-uv-pro disconnect         Drop the Bluetooth link and close Pat
+#   et-uv-pro status             Show pairing and link state
+#   et-uv-pro unpair             Forget the radio
+#
+# On the radio:  Menu > General Settings > KISS TNC > Enable KISS TNC
+# The radio talks to one Bluetooth device at a time. Turn off Bluetooth on
+# your phone (or close the BTECH app and WoAD) before connecting from here.
+
+STATE={{ hamradio_etc_dir }}/state
+DEVICE_NAME="{{ uvpro_bt_name }}"
+DEFAULT_CHANNEL="{{ uvpro_rfcomm_channel }}"
+AX25_PORT="{{ uvpro_ax25_port }}"
+{% raw %}
+BT_DEVICE="/dev/rfcomm0"
+AXPORTS="/etc/ax25/axports"
+CONF_DIR="${HOME}/.config/hamradio"
+CONF="${CONF_DIR}/uvpro.conf"
+
+RED='\033[0;31m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; GREEN='\033[0;32m'; NC='\033[0m'
+say()  { echo -e "$*"; }
+warn() { echo -e "${YELLOW}$*${NC}"; }
+die()  { echo -e "${RED}$*${NC}"; exit 1; }
+
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# ── Saved settings (MAC address, channel) ────────────────────────────────────
+UVPRO_MAC=""
+UVPRO_CHANNEL="$DEFAULT_CHANNEL"
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && source "$CONF"
+
+save_conf() {
+  mkdir -p "$CONF_DIR"
+  {
+    echo "# Written by et-uv-pro"
+    echo "UVPRO_MAC=${UVPRO_MAC}"
+    echo "UVPRO_CHANNEL=${UVPRO_CHANNEL}"
+  } > "$CONF"
+}
+
+valid_mac() { [[ "$1" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; }
+
+is_paired() {
+  valid_mac "$1" && bluetoothctl info "$1" 2>/dev/null | grep -q "Paired: yes"
+}
+
+# Look through devices this computer already knows for the radio's name.
+find_known_radio() {
+  bluetoothctl devices 2>/dev/null | grep -i "$DEVICE_NAME" | awk '{print $2}' | head -n 1
+}
+
+require_bluetooth() {
+  command -v bluetoothctl >/dev/null || die "bluetoothctl not found. Run the playbook with --tags uvpro."
+  if ! bluetoothctl show 2>/dev/null | grep -q "Powered: yes"; then
+    bluetoothctl power on >/dev/null 2>&1
+    sleep 1
+    bluetoothctl show 2>/dev/null | grep -q "Powered: yes" || \
+      die "Bluetooth is off or missing. Turn it on in the Mint Bluetooth panel (and check: rfkill list)."
+  fi
+}
+
+link_up() { [ -e "$BT_DEVICE" ]; }
+
+kill_bt() {
+  sudo -n /usr/local/bin/et-kill-bt 2>/dev/null || sudo /usr/local/bin/et-kill-bt
+}
+
+# ── pair ─────────────────────────────────────────────────────────────────────
+do_pair() {
+  require_bluetooth
+
+  if is_paired "$UVPRO_MAC"; then
+    say "${GREEN}Already paired with ${DEVICE_NAME} (${UVPRO_MAC}).${NC}"
+    return 0
+  fi
+
+  # Paired earlier from the Mint Bluetooth panel? Then just remember it.
+  local known
+  known=$(find_known_radio)
+  if is_paired "$known"; then
+    UVPRO_MAC="$known"; save_conf
+    bluetoothctl trust "$UVPRO_MAC" >/dev/null 2>&1
+    say "${GREEN}Found ${DEVICE_NAME} already paired (${UVPRO_MAC}). Saved.${NC}"
+    return 0
+  fi
+
+  warn "1. Turn Bluetooth off on your phone (or close the BTECH app and WoAD)."
+  warn "2. Turn the ${DEVICE_NAME} off, then on."
+  warn "3. On the radio: Menu > Pairing, press OK."
+  warn "4. Press [ENTER] here when the radio says it is pairing."
+  read -r -p ""
+
+  say "Searching for ${DEVICE_NAME} (15 seconds)..."
+  bluetoothctl --timeout 15 scan on >/dev/null 2>&1
+  local mac
+  mac=$(find_known_radio)
+  if ! valid_mac "$mac"; then
+    say "${RED}Could not find a Bluetooth device named ${DEVICE_NAME}.${NC}"
+    say "Devices seen:"
+    bluetoothctl devices | sed 's/^/  /'
+    say ""
+    say "If the radio is listed under another name, save its address by hand:"
+    say "  et-uv-pro setmac AA:BB:CC:DD:EE:FF"
+    exit 1
+  fi
+  say "Found ${DEVICE_NAME} at ${mac}. Pairing..."
+
+  expect <<EOF
+set timeout 60
+log_user 0
+spawn bluetoothctl
+expect -re {\[.*\][#>]}
+send "power on\r"
+expect -re {succeeded|\[.*\][#>]}
+send "agent on\r"
+send "default-agent\r"
+send "scan on\r"
+expect {
+  "${mac}" {}
+  timeout { puts "radio not seen while pairing"; exit 1 }
+}
+send "pair ${mac}\r"
+expect {
+  -re {Confirm passkey|\(yes/no\)} { send "yes\r"; exp_continue }
+  "Pairing successful" {}
+  "AlreadyExists" {}
+  -re {Failed to pair|not available} { puts "pairing failed"; exit 1 }
+  timeout { puts "pairing timed out"; exit 1 }
+}
+send "trust ${mac}\r"
+expect -re {trust succeeded|Changing}
+send "scan off\r"
+send "exit\r"
+expect eof
+EOF
+  local rc=$?
+
+  if [ $rc -ne 0 ] || ! is_paired "$mac"; then
+    say "${RED}Pairing did not complete.${NC}"
+    say "Try pairing ${DEVICE_NAME} from the Mint Bluetooth panel instead, then run:"
+    say "  et-uv-pro pair"
+    exit 1
+  fi
+
+  UVPRO_MAC="$mac"; save_conf
+  say "${GREEN}Paired and trusted: ${DEVICE_NAME} (${UVPRO_MAC}).${NC}"
+  say "Next: et-uv-pro connect"
+}
+
+# ── AX.25 port entry: "<port> <callsign> <speed> <paclen> <window> <text>" ───
+update_axports() {
+  [ -w "$AXPORTS" ] || die "$AXPORTS is not writable. Run the playbook with --tags uvpro, then log out and back in."
+  local tmp
+  tmp=$(mktemp)
+  grep -v "^${AX25_PORT}[[:space:]]" "$AXPORTS" > "$tmp"
+  printf '%s\t%s\t1200\t255\t2\tUV-PRO Bluetooth packet\n' "$AX25_PORT" "$CALLSIGN" >> "$tmp"
+  cat "$tmp" > "$AXPORTS"   # write in place: we own the file's group, not the folder
+  rm -f "$tmp"
+}
+
+kiss_attach() {
+  say "${BLUE}Attaching AX.25 port '${AX25_PORT}' (${CALLSIGN}) to ${BT_DEVICE}...${NC}"
+  sudo -n /usr/sbin/kissattach "$BT_DEVICE" "$AX25_PORT" >/dev/null 2>&1 \
+    || sudo /usr/sbin/kissattach "$BT_DEVICE" "$AX25_PORT" >/dev/null \
+    || die "kissattach failed. Check: tail /var/log/syslog, and that the ax25 and mkiss kernel modules exist (modinfo mkiss)."
+  # Turn off the KISS checksum, the radio does not use it
+  sudo -n /usr/sbin/kissparms -c 1 -p "$AX25_PORT" >/dev/null 2>&1
+}
+
+# ── connect ──────────────────────────────────────────────────────────────────
+do_connect() {
+  local app="$1"
+  require_bluetooth
+
+  # shellcheck disable=SC1090
+  [ -r "$STATE" ] && source "$STATE"
+  if [ -z "$CALLSIGN" ] || [ "$CALLSIGN" = "N0CALL" ]; then
+    die "No callsign set. Run 'et-user' first."
+  fi
+
+  if ! is_paired "$UVPRO_MAC"; then
+    local known
+    known=$(find_known_radio)
+    if is_paired "$known"; then
+      UVPRO_MAC="$known"; save_conf
+    else
+      die "${DEVICE_NAME} is not paired. Run: et-uv-pro pair"
+    fi
+  fi
+
+  if link_up || pgrep -x kissattach >/dev/null; then
+    warn "Cleaning up an earlier ${DEVICE_NAME} connection..."
+    kill_bt
+    warn "The radio needs about 30 seconds (or a power cycle) before it accepts a new link."
+  fi
+
+  warn "1. Phone Bluetooth off (or BTECH app and WoAD closed)."
+  warn "2. Turn the ${DEVICE_NAME} off, then on."
+  warn "3. On the radio: Menu > General Settings > KISS TNC > Enable KISS TNC"
+  warn "4. Tune the radio to the packet frequency (W8CMN-9 is 144.990 simplex)."
+  warn "5. Press [ENTER] when ready."
+  read -r -p ""
+
+  say "Connecting to ${DEVICE_NAME} (${UVPRO_MAC}, channel ${UVPRO_CHANNEL})..."
+  if ! sudo -n -l /usr/bin/rfcomm connect "$BT_DEVICE" "$UVPRO_MAC" "$UVPRO_CHANNEL" >/dev/null 2>&1; then
+    sudo -v || die "sudo is needed to open the Bluetooth serial port."
+  fi
+  # setsid: keep the link alive after this terminal window closes
+  setsid sudo -n /usr/bin/rfcomm connect "$BT_DEVICE" "$UVPRO_MAC" "$UVPRO_CHANNEL" >/dev/null 2>&1 < /dev/null &
+  local waited=0
+  until link_up; do
+    sleep 1
+    waited=$((waited + 1))
+    [ "$waited" -ge 20 ] && break
+  done
+
+  if ! link_up; then
+    say "${RED}Bluetooth serial link did not come up.${NC}"
+    say "  1. Turn the radio off and on, wait 30 seconds, try again."
+    say "  2. On the radio check Menu > General Settings > Connection > Paired Devices"
+    say "     lists $(hostname). If not: et-uv-pro unpair, then et-uv-pro pair."
+    say "  3. Make sure nothing else (phone, tablet) is connected to the radio."
+    say "  4. If it still fails, the TNC may be on another Bluetooth channel:"
+    say "       sdptool browse ${UVPRO_MAC}      (look for 'Serial Port' and its Channel)"
+    say "       et-uv-pro setchannel <number>"
+    exit 1
+  fi
+  say "${GREEN}Bluetooth link up: ${BT_DEVICE}${NC}"
+
+  if [ -z "$app" ]; then
+    say ""
+    say "What do you want to run?"
+    select opt in "Winlink (Pat)" "Packet terminal (axcall)" "Serial port only (Reticulum, other KISS apps)" "Disconnect"; do
+      case "$REPLY" in
+        1) app=winlink; break ;;
+        2) app=axcall;  break ;;
+        3) app=serial;  break ;;
+        4) app=quit;    break ;;
+        *) say "Pick 1 to 4." ;;
+      esac
+    done
+  fi
+
+  case "$app" in
+    winlink)
+      update_axports
+      kiss_attach
+      et-winlink uvpro || { warn "Pat did not start. The radio link is still up; fix the error and run: et-winlink uvpro"; exit 1; }
+      say ""
+      say "When you are done: et-uv-pro disconnect"
+      ;;
+    axcall)
+      update_axports
+      kiss_attach
+      say ""
+      say "${YELLOW}axcall ${AX25_PORT} <STATION>          connect to a node or BBS"
+      say "axcall ${AX25_PORT} <STATION> <DIGI>   connect through a digipeater"
+      say "sudo axlisten -a -tttt -c            watch packets in and out${NC}"
+      say ""
+      say "When you are done: et-uv-pro disconnect"
+      ;;
+    serial)
+      say ""
+      say "KISS serial port ready: ${BT_DEVICE} (9600 8N1)."
+      say "Point Reticulum (KISSInterface) or another KISS program at it."
+      say "Do not also run Winlink or axcall on it at the same time."
+      say "When you are done: et-uv-pro disconnect"
+      ;;
+    quit)
+      kill_bt
+      ;;
+    *)
+      warn "Unknown app '$app'. The link is up on ${BT_DEVICE}."
+      ;;
+  esac
+}
+
+do_status() {
+  say "Radio name:   ${DEVICE_NAME}"
+  say "Saved MAC:    ${UVPRO_MAC:-none (run: et-uv-pro pair)}"
+  say "BT channel:   ${UVPRO_CHANNEL}"
+  if is_paired "$UVPRO_MAC"; then say "Paired:       yes"; else say "Paired:       no"; fi
+  if link_up; then say "Serial link:  up (${BT_DEVICE})"; else say "Serial link:  down"; fi
+  if pgrep -x kissattach >/dev/null; then
+    say "AX.25 port:   attached ($(grep "^${AX25_PORT}[[:space:]]" "$AXPORTS" 2>/dev/null | awk '{print $1" "$2}'))"
+  else
+    say "AX.25 port:   not attached"
+  fi
+  if pgrep -f "pat .*http" >/dev/null; then say "Pat:          running, http://localhost:8080"; else say "Pat:          not running"; fi
+}
+
+case "$1" in
+  p|pair)        do_pair ;;
+  c|connect)     do_connect "$2" ;;
+  d|disconnect)
+    pkill -f "pat .*http" 2>/dev/null && say "Pat stopped."
+    kill_bt
+    ;;
+  s|status)      do_status ;;
+  u|unpair)
+    valid_mac "$UVPRO_MAC" || die "No saved radio to unpair."
+    kill_bt
+    bluetoothctl untrust "$UVPRO_MAC" >/dev/null 2>&1
+    bluetoothctl remove "$UVPRO_MAC"
+    UVPRO_MAC=""; save_conf
+    warn "Also remove this computer on the radio:"
+    warn "  Menu > General Settings > Connection > Paired Devices"
+    ;;
+  setmac)
+    valid_mac "$2" || die "Usage: et-uv-pro setmac AA:BB:CC:DD:EE:FF"
+    UVPRO_MAC="${2^^}"; save_conf; say "Saved ${UVPRO_MAC}."
+    ;;
+  setchannel)
+    [[ "$2" =~ ^[0-9]+$ ]] || die "Usage: et-uv-pro setchannel <number>"
+    UVPRO_CHANNEL="$2"; save_conf; say "Saved channel ${UVPRO_CHANNEL}."
+    ;;
+  *) usage; exit 1 ;;
+esac
+{% endraw %}

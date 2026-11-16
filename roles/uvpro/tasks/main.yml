@@ -1,0 +1,122 @@
+---
+# roles/uvpro/tasks/main.yml
+# BTECH UV-PRO: packet over the radio's built-in Bluetooth KISS TNC.
+# Bluetooth serial link (rfcomm) -> kernel AX.25 port (kissattach) -> Pat.
+# Mirrors ETC's et-uv-pro. Nothing here needs Direwolf or a sound card.
+
+- name: Install Bluetooth and AX.25 packages
+  ansible.builtin.apt:
+    name:
+      - bluez            # bluetoothctl, rfcomm, sdptool
+      - ax25-tools       # kissattach, kissparms
+      - ax25-apps        # axcall, axlisten
+      - libax25
+      - expect           # drives bluetoothctl while pairing
+      - rfkill
+      - jq
+    state: present
+  tags: [uvpro]
+
+- name: Make sure the Bluetooth service is enabled and running
+  ansible.builtin.systemd:
+    name: bluetooth
+    enabled: true
+    state: started
+  when: ansible_facts["service_mgr"] == "systemd"
+  tags: [uvpro]
+
+- name: Make sure /etc/ax25 exists
+  ansible.builtin.file:
+    path: /etc/ax25
+    state: directory
+    mode: "0755"
+  tags: [uvpro]
+
+- name: Make sure /etc/ax25/axports exists
+  ansible.builtin.copy:
+    dest: /etc/ax25/axports
+    content: |
+      # /etc/ax25/axports
+      # name callsign speed paclen window description
+    force: false
+    mode: "0664"
+  tags: [uvpro]
+
+- name: Let the radio user update the AX.25 port list (callsign changes)
+  ansible.builtin.file:
+    path: /etc/ax25/axports
+    owner: root
+    group: "{{ radio_user }}"
+    mode: "0664"
+  tags: [uvpro]
+
+- name: Install et-kill-bt (drop the Bluetooth TNC link)
+  ansible.builtin.copy:
+    dest: "{{ hamradio_bin_dir }}/et-kill-bt"
+    content: |
+      #!/bin/bash
+      # et-kill-bt: stop everything tied to a Bluetooth TNC link
+      # Managed by emcommtools-mint (roles/uvpro). Runs as root (via sudo).
+      # After this, power-cycle the radio or wait 30 seconds before reconnecting.
+      if [ "$EUID" -ne 0 ]; then
+        echo "et-kill-bt must be run as root (sudo et-kill-bt)"
+        exit 1
+      fi
+      FOUND=0
+      if pgrep -x kissattach >/dev/null; then
+        killall kissattach && echo "  stopped: kissattach"
+        FOUND=1
+      fi
+      if pgrep -f "rfcomm connect" >/dev/null; then
+        pkill -f "rfcomm connect" && echo "  stopped: rfcomm"
+        FOUND=1
+      fi
+      sleep 1
+      /usr/bin/rfcomm release 0 >/dev/null 2>&1
+      [ "$FOUND" -eq 1 ] && echo "  Bluetooth TNC link closed. Wait 30 seconds before reconnecting."
+      exit 0
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [uvpro]
+
+- name: Allow the radio user to manage the Bluetooth TNC link without a password
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/hamradio-uvpro
+    content: |
+      # Managed by emcommtools-mint (roles/uvpro)
+      {{ radio_user }} ALL=(root) NOPASSWD: /usr/bin/rfcomm connect /dev/rfcomm0 *
+      {{ radio_user }} ALL=(root) NOPASSWD: /usr/sbin/kissattach /dev/rfcomm0 *
+      {{ radio_user }} ALL=(root) NOPASSWD: /usr/sbin/kissparms *
+      {{ radio_user }} ALL=(root) NOPASSWD: {{ hamradio_bin_dir }}/et-kill-bt
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  tags: [uvpro]
+
+- name: Install et-uv-pro
+  ansible.builtin.template:
+    src: et-uv-pro.j2
+    dest: "{{ hamradio_bin_dir }}/et-uv-pro"
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [uvpro]
+
+- name: Add "Winlink (UV-PRO)" to the app menu
+  ansible.builtin.copy:
+    dest: /usr/share/applications/et-uv-pro-winlink.desktop
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Winlink (UV-PRO)
+      Comment=Connect the BTECH UV-PRO over Bluetooth and open Pat Winlink
+      Exec=bash -c "et-uv-pro connect winlink; echo; read -r -p 'Press ENTER to close this window (the link stays up). ' _"
+      Icon=mail-send-receive
+      Terminal=true
+      Categories=HamRadio;Network;
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [uvpro]
