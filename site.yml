@@ -40,6 +40,9 @@
     - role: ardop
       tags: [ardop]
 
+    - role: mercury
+      tags: [mercury]
+
     # --- Digital mode applications ---
     - role: wsjtx
       tags: [wsjtx]
@@ -53,6 +56,10 @@
     # --- Winlink / Pat ---
     - role: pat
       tags: [pat]
+
+    # --- BTECH UV-PRO Bluetooth KISS TNC (packet / Winlink) ---
+    - role: uvpro
+      tags: [uvpro]
 
     # --- Packet / BBS ---
     - role: linbpq
@@ -95,6 +102,8 @@
       tags: [glue]
 
     # --- Start/Stop Radio launcher + desktop icons ---
+    # Disabled on purpose: it overwrote the working scripts in ~/radio and
+    # broke JS8-tracker startup. ~/radio is not managed by this playbook.
     # - role: launcher
     #   tags: [launcher]
 

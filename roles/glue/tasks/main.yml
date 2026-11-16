@@ -115,10 +115,20 @@
       else
         row "CAT:"     "inactive"
       fi
-      for svc in direwolf ardopc linbpq; do
+      for svc in direwolf ardopc mercury linbpq; do
         STATUS=$(systemctl is-active "$svc" 2>/dev/null)
         row "$svc:" "$STATUS"
       done
+      if [ -e /dev/rfcomm0 ]; then
+        row "UV-PRO BT:" "connected"
+      else
+        row "UV-PRO BT:" "not connected"
+      fi
+      if pgrep -f "pat .*http" >/dev/null; then
+        row "Pat:" "localhost:8080"
+      else
+        row "Pat:" "not running"
+      fi
       div
       IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -1)
       row "IP:" "${IP:-no network}"
@@ -224,14 +234,19 @@
       pkill -f "paracon"    2>/dev/null && echo "  stopped: paracon"
       pkill -f "qttermtcp"  2>/dev/null && echo "  stopped: qttermtcp"
       pkill -f "chattervox" 2>/dev/null && echo "  stopped: chattervox"
-      pkill -f "pat http"   2>/dev/null && echo "  stopped: pat"
+      pkill -f "pat .*http" 2>/dev/null && echo "  stopped: pat"
 
       # ── Stop systemd services ──────────────────────────────────────────────
-      for svc in direwolf ardopc linbpq; do
+      for svc in direwolf ardopc mercury linbpq; do
         if systemctl is-active --quiet "$svc" 2>/dev/null; then
           sudo systemctl stop "$svc" && echo "  stopped: $svc"
         fi
       done
+
+      # ── Drop a Bluetooth TNC link (UV-PRO) if one is up ────────────────────
+      if [ -x /usr/local/bin/et-kill-bt ] && { pgrep -x kissattach >/dev/null || pgrep -f "rfcomm connect" >/dev/null; }; then
+        sudo /usr/local/bin/et-kill-bt
+      fi
 
       # ── Wait for ports to clear ────────────────────────────────────────────
       sleep 1

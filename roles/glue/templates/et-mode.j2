@@ -12,9 +12,9 @@ if [ -z "$CALLSIGN" ] || [ "$CALLSIGN" = "N0CALL" ]; then
   echo "ERROR: No callsign set. Run 'et-user' first."
   exit 1
 fi
+NO_RADIO=0
 if [ -z "$RADIO" ] || [ "$RADIO" = "none" ]; then
-  echo "ERROR: No radio selected. Run 'et-radio' first."
-  exit 1
+  NO_RADIO=1   # fine for the UV-PRO Bluetooth mode, checked after the menu
 fi
 
 # ── Mode menu ─────────────────────────────────────────────────────────────────
@@ -29,9 +29,15 @@ MODES=(
   "Chat (Chattervox)"
   "APRS Digipeater"
   "Packet Digipeater"
-  "Winlink — VHF/UHF AX.25 Packet"
+  "Winlink — VHF/UHF Packet (Direwolf sound card TNC)"
   "Winlink — HF ARDOP"
+  "Winlink — HF Mercury"
+  "Winlink — UV-PRO Bluetooth Packet"
+  "Winlink — Internet only (telnet)"
 )
+
+# Modes that do not use the radio picked in et-radio
+RADIO_FREE_MODES=" 14 15 "
 
 echo ""
 echo "=== et-mode: Operating Mode ==="
@@ -52,6 +58,11 @@ if ! [[ "$SEL" =~ ^[0-9]+$ ]] || [ "$SEL" -lt 1 ] || [ "$SEL" -gt "${#MODES[@]}"
 fi
 
 MODE_NAME="${MODES[$((SEL-1))]}"
+
+if [ "$NO_RADIO" -eq 1 ] && [[ "$RADIO_FREE_MODES" != *" $SEL "* ]]; then
+  echo "ERROR: No radio selected. Run 'et-radio' first."
+  exit 1
+fi
 
 # ── Stop all running et-services ─────────────────────────────────────────────
 et-kill-all
@@ -181,18 +192,29 @@ case "$SEL" in
     echo "Packet Digipeater started via Direwolf. SSID: ${CALLSIGN}-2"
     ;;
 
-  11) # Winlink AX.25
+  11) # Winlink packet through Direwolf (AGWPE on port 8000)
     start_and_wait_for_service direwolf
-    echo "Starting Pat (Winlink AX.25)..."
-    nohup pat http >/dev/null 2>&1 &
-    echo "Pat web UI: http://localhost:8080"
+    et-winlink packet
     ;;
 
   12) # Winlink ARDOP
-    start_and_wait_for_service ardopc
-    echo "Starting Pat (Winlink ARDOP)..."
-    nohup pat --listen ardop http >/dev/null 2>&1 &
-    echo "Pat web UI: http://localhost:8080"
+    start_and_wait_for_service ardopc 15
+    sleep 2   # ardopcf needs a moment before it accepts Pat
+    et-winlink ardop
+    ;;
+
+  13) # Winlink Mercury (VARA-style TNC on port 8300)
+    start_and_wait_for_service mercury 15
+    sleep 2
+    et-winlink mercury
+    ;;
+
+  14) # Winlink through the UV-PRO's Bluetooth KISS TNC
+    et-uv-pro connect winlink
+    ;;
+
+  15) # Winlink over the internet, no radio
+    et-winlink telnet
     ;;
 
 esac

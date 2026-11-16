@@ -78,6 +78,8 @@ These are the only commands you need to operate:
 | `et-user` | Set callsign, grid square, name, Winlink password |
 | `et-radio` | Select radio model, auto-detect USB port and audio card |
 | `et-mode` | Choose operating mode (JS8Call, WSJT-X, Winlink, APRS, etc.) |
+| `et-winlink` | Point Pat (Winlink) at UV-PRO, Mercury, ARDOP, packet or telnet |
+| `et-uv-pro` | Pair / connect the BTECH UV-PRO over Bluetooth |
 | `et-info` | Show current system status (callsign, radio, mode, CAT) |
 | `et-time` | Show GPS/NTP time sync status |
 | `et-audio` | List available audio devices |
@@ -151,6 +153,8 @@ Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio
 | Packet Digipeater | Direwolf (SSID -2) |
 | Winlink VHF/UHF | Direwolf TNC → Pat |
 | Winlink HF ARDOP | ardopc modem → Pat |
+| Winlink HF Mercury | Mercury modem → Pat (VARA-style TNC) |
+| Winlink UV-PRO | UV-PRO Bluetooth KISS TNC → kernel AX.25 → Pat |
 
 ---
 
@@ -164,7 +168,8 @@ Any radio with DigiRig Mobile or DigiRig Lite. No CAT — set freq/mode on radio
 | JS8Call (improved) | GitHub release AppImage or build from source |
 | fldigi / flmsg / flamp | apt |
 | Pat (Winlink) | GitHub release |
-| ardopc | WB2OSZ binary |
+| ardopc | ardopcf (pflarue) GitHub release |
+| Mercury | Rhizomatica, built from source |
 | LinBPQ | G8BPQ binary |
 | Paracon | GitHub release (.pyz zipapp, no deb) |
 | Chattervox | npm |
@@ -192,7 +197,9 @@ hamradio-mint-setup/
 │   ├── wsjtx/            # WSJT-X
 │   ├── js8call/          # JS8Call
 │   ├── fldigi/           # fldigi + flmsg + flamp
-│   ├── pat/              # Winlink client
+│   ├── pat/              # Winlink client + et-winlink
+│   ├── uvpro/            # BTECH UV-PRO Bluetooth KISS TNC (et-uv-pro)
+│   ├── mercury/          # Mercury HF modem
 │   ├── linbpq/           # Packet node/BBS
 │   ├── paracon/          # Packet terminal client
 │   ├── chattervox/       # AX.25 chat
@@ -228,7 +235,11 @@ hamradio-mint-setup/
 
 - [ ] Navit offline maps (US state selection) not yet automated
 - [ ] VARA FM/HF Wine integration not automated (manual, same as ETC)
-- [ ] Bluetooth TNC radios (BTech UV Pro, VR-N76, TH-D74) not yet implemented
+- [x] BTECH UV-PRO Bluetooth TNC (`et-uv-pro`, see docs/GUIDE.md); needs on-air test
+- [x] Mercury HF modem + Pat (`et-winlink mercury`); needs on-air test
+- [ ] Other Bluetooth TNC radios (VR-N76, TH-D74) not yet implemented
+- [ ] Radio picker for Start Radio (roles/launcher is disabled; ~/radio is hand-managed)
+- [ ] Direwolf MYCALL and PTT are not yet written by et-mode (sound card packet modes)
 - [x] `et-predict` ported (HF propagation map, see docs/GUIDE.md)
 - [x] `et-aircraft` ported (RTL-SDR aircraft tracker, see docs/GUIDE.md)
 - [ ] Offline map tiles for et-predict (mbtileserver on port 1982, US/world .mbtiles from ETC)
