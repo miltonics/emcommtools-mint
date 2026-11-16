@@ -23,10 +23,12 @@ stop_radio.sh, js8-tracker, JS8Spotter) is hand-managed. Do not re-enable the ro
 or write into ~/radio without asking.
 
 ## Reimplementation Order
-1. et-* commands (et-user, et-radio, et-mode, et-info, et-time) — IN PROGRESS
-2. fldigi suite
-3. JS8Call-improved
-4. Remaining roles TBD
+1. et-* commands (et-user, et-radio, et-mode, et-info, et-time) — DONE
+2. conky desktop widget — IN PROGRESS
+3. fldigi suite
+4. JS8Call-improved
+5. xara (vector graphics, emcomm forms/maps)
+6. Remaining roles TBD
 
 ## Key Files
 - site.yml — master playbook
