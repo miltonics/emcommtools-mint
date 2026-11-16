@@ -87,6 +87,25 @@ pat_callsign: "N0CALL"
 pat_winlink_password: ""
 pat_gridsquare: "AA00aa"
 
+# Packet Winlink gateways you use. Each becomes a Pat shortcut, so
+# "pat connect W8CMN-9" works (and it shows in Pat's connect dialog).
+# Tune the radio to the gateway's frequency yourself (W8CMN-9: 144.990).
+winlink_packet_gateways:
+  - "W8CMN-9"
+
+# --- BTECH UV-PRO (Bluetooth KISS TNC) ---
+uvpro_bt_name: "UV-PRO"              # Bluetooth name the radio advertises
+uvpro_rfcomm_channel: 1              # Bluetooth serial channel of the KISS TNC
+uvpro_ax25_port: "wl2k"              # AX.25 port name in /etc/ax25/axports
+
+# --- Mercury HF modem (Rhizomatica) ---
+# Built from source. Both ends of a link must run Mercury 1.9.20 or newer.
+mercury_install: true
+mercury_version: "v1.9.24"
+mercury_repo_url: "https://github.com/Rhizomatica/mercury.git"
+mercury_src_dir: "/usr/local/src/mercury"
+mercury_tcp_port: 8300               # VARA-style TNC: control 8300, data 8301
+
 # --- LinBPQ ---
 # Placeholders — et-user will overwrite these at runtime via /etc/hamradio/state
 linbpq_callsign: "N0CALL"

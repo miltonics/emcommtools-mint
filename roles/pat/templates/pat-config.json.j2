@@ -3,20 +3,42 @@
   "secure_login_password": "{{ pat_winlink_password }}",
   "auxiliary_addresses": [],
   "locator": "{{ pat_gridsquare }}",
-  "service_codes": ["PUBLIC"],
+  "service_codes": ["PUBLIC", "MERCURY"],
   "http_addr": "localhost:8080",
-  "motd": ["hamradio-mint-setup"],
+  "motd": ["Open source Winlink client - getpat.io"],
   "connect_aliases": {
-    "ax25": "ax25://{{ pat_callsign }}",
-    "ardop": "ardop://{{ pat_callsign }}"
+    "telnet": "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k"
   },
-  "listen": ["ax25", "ardop"],
-  "ardop": {
-    "addr": "localhost:8515",
-    "arq_bandwidth": { "Forced": false, "Max": 2000 }
+  "listen": [],
+  "hamlib_rigs": {
+    "et-rig": { "address": "localhost:4532", "network": "tcp" }
   },
   "ax25": {
-    "port": "wl2k",
-    "rig": ""
-  }
+    "engine": "linux",
+    "rig": "",
+    "beacon": { "every": 3600, "message": "Winlink P2P", "destination": "IDENT" }
+  },
+  "ax25_linux": { "port": "{{ uvpro_ax25_port }}" },
+  "agwpe": { "addr": "localhost:8000", "radio_port": 0 },
+  "serial-tnc": { "path": "/dev/ttyUSB0", "serial_baud": 9600, "hbaud": 1200, "type": "Kenwood" },
+  "ardop": {
+    "addr": "localhost:8515",
+    "arq_bandwidth": { "Forced": false, "Max": 500 },
+    "rig": "",
+    "ptt_ctrl": false,
+    "beacon_interval": 0,
+    "cwid_enabled": true
+  },
+  "pactor": { "path": "/dev/ttyUSB0", "baudrate": 57600, "rig": "", "custom_init_script": "" },
+  "telnet": { "listen_addr": ":8774", "password": "" },
+  "varahf": { "addr": "localhost:{{ mercury_tcp_port }}", "bandwidth": 2300, "rig": "", "ptt_ctrl": false },
+  "varafm": { "addr": "localhost:8300", "bandwidth": 0, "rig": "", "ptt_ctrl": false },
+  "gpsd": {
+    "enable_http": false,
+    "allow_forms": false,
+    "use_server_time": false,
+    "addr": "localhost:2947"
+  },
+  "schedule": {},
+  "version_reporting_disabled": false
 }

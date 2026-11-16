@@ -1,0 +1,164 @@
+#!/bin/bash
+# et-winlink: point Pat (Winlink) at one transport and start its web page
+# Managed by emcommtools-mint (roles/pat)
+#
+#   et-winlink uvpro     VHF/UHF packet through the UV-PRO Bluetooth TNC
+#                        (run "et-uv-pro connect" first; it calls this)
+#   et-winlink packet    VHF/UHF packet through Direwolf (sound card TNC)
+#   et-winlink ardop     HF through the ARDOP modem
+#   et-winlink mercury   HF through the Mercury modem
+#   et-winlink telnet    Internet only (no radio)
+#   et-winlink config    Update Pat's config and stop, do not start Pat
+#   et-winlink stop      Close Pat
+#
+# Your callsign, grid and Winlink password come from et-user. Your own
+# connect aliases in Pat's config are kept. Only the settings each
+# transport needs are changed.
+
+STATE={{ hamradio_etc_dir }}/state
+BASE_CONFIG={{ hamradio_lib_dir }}/pat-config.base.json
+AX25_PORT="{{ uvpro_ax25_port }}"
+MERCURY_PORT="{{ mercury_tcp_port }}"
+PACKET_GATEWAYS="{{ winlink_packet_gateways | join(' ') }}"
+{% raw %}
+PAT_CONFIG="${PAT_CONFIG:-${HOME}/.config/pat/config.json}"
+PAT_LOG="${HOME}/.local/state/hamradio/pat.log"
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+WL_MODE="$1"   # not MODE: the state file has its own MODE
+case "$WL_MODE" in
+  uvpro|packet|ardop|mercury|telnet|config) ;;
+  stop) pkill -f "pat .*http" 2>/dev/null && echo "Pat stopped." || echo "Pat was not running."; exit 0 ;;
+  *) usage; exit 1 ;;
+esac
+
+for tool in pat jq; do
+  command -v "$tool" >/dev/null || { echo "ERROR: $tool is not installed. Run the playbook with --tags pat."; exit 1; }
+done
+
+# shellcheck disable=SC1090
+[ -r "$STATE" ] && source "$STATE"
+if [ -z "$CALLSIGN" ] || [ "$CALLSIGN" = "N0CALL" ]; then
+  echo "ERROR: No callsign set. Run 'et-user' first."
+  exit 1
+fi
+
+# ── Make sure there is a config to work on ───────────────────────────────────
+mkdir -p "$(dirname "$PAT_CONFIG")" "$(dirname "$PAT_LOG")"
+if [ ! -s "$PAT_CONFIG" ] || ! jq -e . "$PAT_CONFIG" >/dev/null 2>&1; then
+  [ -s "$PAT_CONFIG" ] && cp "$PAT_CONFIG" "$PAT_CONFIG.broken.$(date +%s)"
+  cp "$BASE_CONFIG" "$PAT_CONFIG" || { echo "ERROR: $BASE_CONFIG missing. Run the playbook with --tags pat."; exit 1; }
+  chmod 600 "$PAT_CONFIG"
+fi
+
+# ── Is rig control (rigctld) running? Then it can key the radio. ─────────────
+RIG=""
+if [ -n "$RADIO_MODEL" ] && systemctl is-active --quiet "rigctld@${RADIO_MODEL}" 2>/dev/null; then
+  RIG="et-rig"
+fi
+
+# ── Per-transport settings ───────────────────────────────────────────────────
+AX25_SCHEME="ax25+linux"
+case "$WL_MODE" in
+  packet) AX25_SCHEME="ax25+agwpe" ;;
+esac
+# ARDOP: Pat keys the radio through rig control when it is available.
+ARDOP_PTT=false; [ -n "$RIG" ] && ARDOP_PTT=true
+# Mercury keys the radio itself (see start-mercury), so Pat must not.
+VARA_PTT=false
+
+TMP=$(mktemp)
+jq \
+  --arg call "$CALLSIGN" \
+  --arg grid "${GRIDSQUARE:-}" \
+  --arg pw "${WINLINK_PASSWORD:-}" \
+  --arg rig "$RIG" \
+  --arg axport "$AX25_PORT" \
+  --arg axscheme "$AX25_SCHEME" \
+  --arg mport "$MERCURY_PORT" \
+  --arg gateways "$PACKET_GATEWAYS" \
+  --argjson ardop_ptt "$ARDOP_PTT" \
+  --argjson vara_ptt "$VARA_PTT" \
+  --slurpfile base "$BASE_CONFIG" '
+  # start from the stock config so every section exists, keep what is set
+  ($base[0] * .)
+  | .mycall = $call
+  | (if $grid != "" then .locator = $grid else . end)
+  | (if $pw != "" then .secure_login_password = $pw else . end)
+  | .service_codes = ((.service_codes // []) + ["PUBLIC", "MERCURY"] | unique)
+  | .hamlib_rigs["et-rig"] = {"address": "localhost:4532", "network": "tcp"}
+  # AX.25: drop the pre-1.0 "port" key, use the current layout
+  | .ax25 |= (del(.port) | .engine = (if $axscheme == "ax25+agwpe" then "agwpe" else "linux" end))
+  | .ax25_linux.port = $axport
+  | .agwpe = {"addr": "localhost:8000", "radio_port": 0}
+  | .ardop.addr = "localhost:8515"
+  | .ardop.rig = $rig
+  | .ardop.ptt_ctrl = $ardop_ptt
+  | .varahf = {"addr": ("localhost:" + $mport), "bandwidth": (.varahf.bandwidth // 2300), "rig": $rig, "ptt_ctrl": $vara_ptt}
+  # aliases written by older versions of this playbook pointed at yourself
+  | .connect_aliases |= with_entries(select(((.key == "ax25" or .key == "ardop") and (.value | test("^(ax25|ardop)://[^/]*$"))) | not))
+  | .connect_aliases.telnet //= "telnet://{mycall}:CMSTelnet@cms.winlink.org:8772/wl2k"
+  | reduce ($gateways | split(" ") | map(select(length > 0)))[] as $g
+      (.; .connect_aliases[$g] = ($axscheme + ":///" + $g))
+  | .listen = []
+' "$PAT_CONFIG" > "$TMP" || { rm -f "$TMP"; echo "ERROR: could not update $PAT_CONFIG"; exit 1; }
+cat "$TMP" > "$PAT_CONFIG" && rm -f "$TMP"
+chmod 600 "$PAT_CONFIG"
+
+if [ -z "$WINLINK_PASSWORD" ] && [ "$(jq -r .secure_login_password "$PAT_CONFIG")" = "" ]; then
+  echo "NOTE: no Winlink password set. Run 'et-user' if the gateway asks for a login."
+fi
+
+[ "$WL_MODE" = "config" ] && { echo "Pat config updated: $PAT_CONFIG"; exit 0; }
+
+# ── Preflight for the chosen transport ───────────────────────────────────────
+case "$WL_MODE" in
+  uvpro)
+    if ! grep -q "^${AX25_PORT}[[:space:]]" /etc/ax25/axports 2>/dev/null || ! ip link show 2>/dev/null | grep -q "ax[0-9]"; then
+      echo "ERROR: no AX.25 link to the radio. Run: et-uv-pro connect"
+      exit 1
+    fi
+    HINT="pat connect ax25+linux:///<GATEWAY>   (example: W8CMN-9)"
+    ;;
+  packet)
+    systemctl is-active --quiet direwolf 2>/dev/null || { echo "ERROR: Direwolf is not running. Start it with et-mode."; exit 1; }
+    HINT="pat connect ax25+agwpe:///<GATEWAY>"
+    ;;
+  ardop)
+    systemctl is-active --quiet ardopc 2>/dev/null || { echo "ERROR: ARDOP modem is not running. Start it with et-mode."; exit 1; }
+    HINT="pat connect ardop:///<GATEWAY>?freq=<dial kHz>"
+    [ -z "$RIG" ] && echo "NOTE: rig control is not running, so Pat will not key the radio. Use VOX or run et-radio."
+    ;;
+  mercury)
+    systemctl is-active --quiet mercury 2>/dev/null || { echo "ERROR: Mercury modem is not running. Start it with et-mode."; exit 1; }
+    HINT="pat connect varahf:///<GATEWAY>?freq=<dial kHz>   (Mercury gateways only)"
+    ;;
+  telnet)
+    HINT="pat connect telnet"
+    ;;
+esac
+
+# ── Start Pat ────────────────────────────────────────────────────────────────
+pkill -f "pat .*http" 2>/dev/null && sleep 1
+# setsid: keep Pat alive after this terminal window closes
+setsid nohup pat --config "$PAT_CONFIG" http > "$PAT_LOG" 2>&1 < /dev/null &
+sleep 2
+if ! pgrep -f "pat .*http" >/dev/null; then
+  echo "ERROR: Pat did not stay running. Last lines of $PAT_LOG:"
+  tail -n 10 "$PAT_LOG"
+  exit 1
+fi
+
+echo ""
+echo "Pat is running ($WL_MODE).  Web page: http://localhost:8080"
+echo "  In the web page: Action > Connect, pick the transport, enter the gateway."
+echo "  Or from a terminal:  $HINT"
+if [ -n "$PACKET_GATEWAYS" ] && { [ "$WL_MODE" = "uvpro" ] || [ "$WL_MODE" = "packet" ]; }; then
+  for g in $PACKET_GATEWAYS; do echo "  Saved gateway:       pat connect $g"; done
+fi
+echo "  Log: $PAT_LOG"
+if [ -n "$DISPLAY$WAYLAND_DISPLAY" ] && command -v xdg-open >/dev/null && [ -z "$ET_WINLINK_NO_BROWSER" ]; then
+  (xdg-open http://localhost:8080 >/dev/null 2>&1 &)
+fi
+{% endraw %}
