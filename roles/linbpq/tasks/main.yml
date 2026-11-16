@@ -1,48 +1,173 @@
 ---
 # roles/linbpq/tasks/main.yml
-# LinBPQ: G8BPQ's packet node/BBS. Not in apt — binary from G8BPQ's site.
+# LinBPQ: G8BPQ's packet node, BBS and chat server.
+# Built from source (64-bit) instead of the 32-bit download, so no i386
+# libraries are needed. Its config is written by et-bbs-server from
+# /etc/hamradio/state each time it starts.
 
-- name: Install LinBPQ dependencies
+- name: Install LinBPQ build dependencies
   ansible.builtin.apt:
     name:
-      - libax25
-      - ax25-tools
+      - build-essential
+      - git
+      - unzip
+      - libminiupnpc-dev
+      - libconfig-dev
+      - libpcap-dev
+      - zlib1g-dev
+      - libcap2-bin
+      - python3
     state: present
   tags: [linbpq]
 
-- name: Create LinBPQ directory
+# libbacktrace is not packaged for Ubuntu Noble; LinBPQ links against it.
+- name: Check for libbacktrace
+  ansible.builtin.stat:
+    path: /usr/local/lib/libbacktrace.a
+  register: libbacktrace_stat
+  tags: [linbpq]
+
+- name: Fetch libbacktrace source
+  ansible.builtin.git:
+    repo: https://github.com/ianlancetaylor/libbacktrace.git
+    dest: /usr/local/src/libbacktrace
+    version: "{{ libbacktrace_version }}"
+    force: true
+  when: not libbacktrace_stat.stat.exists
+  tags: [linbpq]
+
+- name: Build and install libbacktrace
+  ansible.builtin.shell:
+    cmd: ./configure --prefix=/usr/local && make -j{{ ansible_facts['processor_vcpus'] | default(2) }} && make install
+    chdir: /usr/local/src/libbacktrace
+  when: not libbacktrace_stat.stat.exists
+  changed_when: true
+  tags: [linbpq]
+
+- name: Check installed LinBPQ build
+  ansible.builtin.slurp:
+    src: /usr/local/share/linbpq/BUILT_FROM
+  register: linbpq_built_from
+  failed_when: false
+  tags: [linbpq]
+
+- name: Decide whether LinBPQ needs building
+  ansible.builtin.set_fact:
+    linbpq_needs_build: >-
+      {{ (linbpq_built_from.content | default('') | b64decode | trim) != linbpq_version }}
+  tags: [linbpq]
+
+- name: Fetch LinBPQ source ({{ linbpq_version[:7] }})
+  ansible.builtin.git:
+    repo: "{{ linbpq_repo_url }}"
+    dest: "{{ linbpq_src_dir }}"
+    version: "{{ linbpq_version }}"
+    force: true
+  when: linbpq_needs_build
+  tags: [linbpq]
+
+# "nomqtt": MQTT reporting needs a library Ubuntu does not package.
+# LIBS is overridden to add libbacktrace, which the nomqtt target omits.
+- name: Build LinBPQ (a few minutes)
+  ansible.builtin.shell:
+    cmd: >-
+      make clean >/dev/null 2>&1;
+      make -j{{ ansible_facts['processor_vcpus'] | default(2) }} nomqtt
+      LIBS="-lminiupnpc -lm -lz -lpthread -lconfig -lpcap -lbacktrace"
+    chdir: "{{ linbpq_src_dir }}"
+  when: linbpq_needs_build
+  changed_when: true
+  tags: [linbpq]
+
+- name: Install the linbpq binary
+  ansible.builtin.copy:
+    src: "{{ linbpq_src_dir }}/linbpq"
+    dest: /usr/local/bin/linbpq
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when: linbpq_needs_build
+  tags: [linbpq]
+
+- name: Create LinBPQ share directory
   ansible.builtin.file:
-    path: "{{ radio_user_home }}/linbpq"
+    path: /usr/local/share/linbpq
+    state: directory
+    mode: "0755"
+  tags: [linbpq]
+
+- name: Record which LinBPQ source is installed
+  ansible.builtin.copy:
+    dest: /usr/local/share/linbpq/BUILT_FROM
+    content: "{{ linbpq_version }}\n"
+    mode: "0644"
+  when: linbpq_needs_build
+  tags: [linbpq]
+
+- name: Create LinBPQ working directory
+  ansible.builtin.file:
+    path: "{{ radio_user_home }}/linbpq/HTML"
     state: directory
     owner: "{{ radio_user }}"
     group: "{{ radio_user }}"
-    mode: "0755"
+    mode: "0750"
   tags: [linbpq]
 
-- name: Check if LinBPQ binary exists
+- name: Check for LinBPQ web pages
   ansible.builtin.stat:
-    path: "{{ radio_user_home }}/linbpq/linbpq"
-  register: linbpq_stat
+    path: "{{ radio_user_home }}/linbpq/HTML/index.html"
+  register: linbpq_html_stat
   tags: [linbpq]
 
-- name: Download LinBPQ binary
+# The web admin pages are only published on G8BPQ's site. If the download
+# fails the node still works; only the web pages are missing.
+- name: Download LinBPQ web pages
   ansible.builtin.get_url:
-    url: "http://www.cantab.net/users/john.wiseman/Downloads/linbpq"
-    dest: "{{ radio_user_home }}/linbpq/linbpq"
-    owner: "{{ radio_user }}"
-    group: "{{ radio_user }}"
-    mode: "0755"
-  when: not linbpq_stat.stat.exists
+    url: "{{ linbpq_html_url }}"
+    dest: /usr/local/src/HTMLPages.zip
+    mode: "0644"
+    timeout: 60
+  register: linbpq_html_dl
+  failed_when: false
+  when: not linbpq_html_stat.stat.exists
   tags: [linbpq]
 
-- name: Write LinBPQ base config (bpq32.cfg)
-  ansible.builtin.template:
-    src: bpq32.cfg.j2
-    dest: "{{ radio_user_home }}/linbpq/bpq32.cfg"
+- name: Check the web pages download
+  ansible.builtin.stat:
+    path: /usr/local/src/HTMLPages.zip
+  register: linbpq_html_zip
+  tags: [linbpq]
+
+- name: Unpack LinBPQ web pages
+  ansible.builtin.unarchive:
+    src: /usr/local/src/HTMLPages.zip
+    dest: "{{ radio_user_home }}/linbpq/HTML"
+    remote_src: true
     owner: "{{ radio_user }}"
     group: "{{ radio_user }}"
-    mode: "0644"
-    force: false
+  when:
+    - not linbpq_html_stat.stat.exists
+    - linbpq_html_zip.stat.exists
+  tags: [linbpq]
+
+- name: Warn when LinBPQ web pages could not be downloaded
+  ansible.builtin.debug:
+    msg: >-
+      Could not download {{ linbpq_html_url }}. LinBPQ works without it, but
+      the web admin page will be bare. Re-run with --tags linbpq to retry.
+  when:
+    - not linbpq_html_stat.stat.exists
+    - not linbpq_html_zip.stat.exists
+  tags: [linbpq]
+
+- name: Install et-bbs-server (writes LinBPQ config, starts the node)
+  ansible.builtin.template:
+    src: et-bbs-server.j2
+    dest: "{{ hamradio_bin_dir }}/et-bbs-server"
+    owner: root
+    group: root
+    mode: "0755"
   tags: [linbpq]
 
 - name: Install LinBPQ systemd service
@@ -50,15 +175,16 @@
     dest: /etc/systemd/system/linbpq.service
     content: |
       [Unit]
-      Description=LinBPQ Packet Node
-      After=network.target direwolf.service
+      Description=LinBPQ packet node and BBS (start with et-bbs-server)
+      After=network.target
 
       [Service]
       Type=simple
       User={{ radio_user }}
       WorkingDirectory={{ radio_user_home }}/linbpq
-      ExecStart={{ radio_user_home }}/linbpq/linbpq
+      ExecStart=/usr/local/bin/linbpq
       Restart=on-failure
+      RestartSec=5
 
       [Install]
       WantedBy=multi-user.target
@@ -66,4 +192,15 @@
     group: root
     mode: "0644"
   notify: Reload systemd
+  tags: [linbpq]
+
+- name: Write a starting LinBPQ config if a callsign is set
+  ansible.builtin.command:
+    cmd: "{{ hamradio_bin_dir }}/et-bbs-server config"
+    creates: "{{ radio_user_home }}/linbpq/bpq32.cfg"
+  become: true
+  become_user: "{{ radio_user }}"
+  register: linbpq_cfg
+  changed_when: "'written' in (linbpq_cfg.stdout | default(''))"
+  failed_when: false
   tags: [linbpq]

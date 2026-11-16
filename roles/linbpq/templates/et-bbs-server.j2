@@ -1,0 +1,256 @@
+#!/bin/bash
+# et-bbs-server: run your own packet node and BBS (LinBPQ)
+# Managed by emcommtools-mint (roles/linbpq)
+#
+#   et-bbs-server start [uvpro|direwolf]   Write the config, start the node
+#   et-bbs-server stop                     Stop the node
+#   et-bbs-server status                   Show whether it is running
+#   et-bbs-server config [uvpro|direwolf]  Only write the config
+#
+# Radio paths:
+#   uvpro     BTECH UV-PRO over Bluetooth (default). The node also offers
+#             an AGWPE port ({{ linbpq_agw_port }}) so Paracon can use the radio through it.
+#   direwolf  Sound card packet through Direwolf (KISS on port 8001).
+#
+# Your node is CALLSIGN-{{ linbpq_ssid }}, the BBS CALLSIGN-{{ linbpq_bbs_ssid }}, chat CALLSIGN-{{ linbpq_chat_ssid }}.
+# Web admin: http://localhost:{{ linbpq_http_port }}  (user "sysop", password in
+# ~/linbpq/sysop-password). Telnet: localhost {{ linbpq_telnet_port }}.
+#
+# The config is rewritten from /etc/hamradio/state on every start. To manage
+# bpq32.cfg by hand instead, delete its first line; it will then be left alone.
+
+STATE={{ hamradio_etc_dir }}/state
+NODE_SSID={{ linbpq_ssid }}
+BBS_SSID={{ linbpq_bbs_ssid }}
+CHAT_SSID={{ linbpq_chat_ssid }}
+AGW_PORT={{ linbpq_agw_port }}
+TELNET_PORT={{ linbpq_telnet_port }}
+HTTP_PORT={{ linbpq_http_port }}
+{% raw %}
+BPQ_DIR="${HOME}/linbpq"
+CFG="${BPQ_DIR}/bpq32.cfg"
+PATH_FILE="${BPQ_DIR}/radio-path"
+PW_FILE="${BPQ_DIR}/sysop-password"
+MARKER="; Managed by et-bbs-server"
+KISS_DEVICE="${BBS_KISS_DEVICE:-/dev/rfcomm0}"
+
+RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; NC='\033[0m'
+die() { echo -e "${RED}$*${NC}"; exit 1; }
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# shellcheck disable=SC1090
+[ -r "$STATE" ] && source "$STATE"
+
+pick_path() {
+  local p="$1"
+  if [ -z "$p" ]; then
+    if [ -t 0 ]; then
+      echo "Which radio should the node use?"
+      echo "  1) BTECH UV-PRO over Bluetooth"
+      echo "  2) Sound card packet through Direwolf"
+      read -r -p "Choice [1]: " c
+      case "$c" in 2) p=direwolf ;; *) p=uvpro ;; esac
+    else
+      p=$(cat "$PATH_FILE" 2>/dev/null || echo uvpro)
+    fi
+  fi
+  case "$p" in uvpro|direwolf) echo "$p" ;; *) die "Unknown radio path '$p'. Use uvpro or direwolf." ;; esac
+}
+
+write_config() {
+  local path="$1"
+  if [ -z "$CALLSIGN" ] || [ "$CALLSIGN" = "N0CALL" ]; then
+    echo "No callsign set. Run 'et-user' first."
+    return 1
+  fi
+  mkdir -p "$BPQ_DIR"
+  if [ -s "$CFG" ] && ! head -n 1 "$CFG" | grep -qF "$MARKER"; then
+    echo "Leaving $CFG alone (managed by hand)."
+    echo "$path" > "$PATH_FILE"
+    return 0
+  fi
+  if [ ! -s "$PW_FILE" ]; then
+    (umask 077; tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 12 > "$PW_FILE"; echo >> "$PW_FILE")
+  fi
+  local pw grid suffix
+  pw=$(head -n 1 "$PW_FILE")
+  grid="${GRIDSQUARE:-}"
+  suffix="${CALLSIGN: -3}"        # aliases: last 3 letters + NOD/BBS/CHT
+
+  local port_block agw_block=""
+  if [ "$path" = "uvpro" ]; then
+    port_block="PORT
+  PORTNUM=1
+  ID=UV-PRO 1200 baud packet
+  TYPE=ASYNC
+  PROTOCOL=KISS
+  COMPORT=${KISS_DEVICE}     ; UV-PRO Bluetooth KISS TNC (et-uv-pro connect serial)
+  SPEED=9600
+  CHANNEL=A"
+    agw_block="; AGWPE port for Paracon and other AGW programs
+AGWPORT=${AGW_PORT}
+AGWSESSIONS=10
+AGWMASK=0x1"
+  else
+    port_block="PORT
+  PORTNUM=1
+  ID=Direwolf 1200 baud packet
+  TYPE=ASYNC
+  PROTOCOL=KISS
+  IPADDR=127.0.0.1           ; Direwolf on this computer
+  TCPPORT=8001               ; Direwolf KISS port
+  CHANNEL=A"
+  fi
+
+  local tmp
+  tmp=$(mktemp)
+  cat > "$tmp" <<CFG
+${MARKER} from /etc/hamradio/state (radio path: ${path}).
+; Delete the line above to edit this file by hand.
+
+SIMPLE
+NODECALL=${CALLSIGN}-${NODE_SSID}
+NODEALIAS=${suffix}NOD
+LOCATOR=${grid}
+
+IDMSG:
+${CALLSIGN}-${NODE_SSID} packet node
+***
+
+BTEXT:
+${CALLSIGN} packet node and BBS
+***
+
+CTEXT:
+${CALLSIGN} packet node in ${grid}
+BBS   connect to the mailbox
+CHAT  chat with other users
+?     list commands
+***
+FULL_CTEXT=1
+
+INFOMSG:
+${CALLSIGN} packet node in ${grid}.
+To leave me a message: type BBS, then SP ${CALLSIGN},
+enter a title, type the message, and end with /EX on its own line.
+***
+
+IDINTERVAL=10
+BTINTERVAL=0
+NODESINTERVAL=30
+
+${agw_block}
+
+${port_block}
+  QUALITY=192
+  MINQUAL=150
+  MAXFRAME=2
+  FRACK=7000
+  RESPTIME=1000
+  RETRIES=10
+  PACLEN=128
+  PERSIST=64
+  SLOTTIME=100
+  TXDELAY=300
+  TXTAIL=30
+  DIGIFLAG=0                 ; do not digipeat
+  USERS=0
+ENDPORT
+
+PORT
+  PORTNUM=2
+  ID=Telnet
+  DRIVER=Telnet
+  QUALITY=0
+  CONFIG
+  CMS=0
+  LOGGING=1
+  DisconnectOnClose=0
+  TCPPORT=${TELNET_PORT}
+  HTTPPORT=${HTTP_PORT}
+  LOGINPROMPT=user:
+  PASSWORDPROMPT=password:
+  MAXSESSIONS=10
+  CTEXT=${CALLSIGN} node. Enter ? for commands.\n
+  USER=sysop,${pw},${CALLSIGN},"",SYSOP
+ENDPORT
+
+APPLICATION 1,BBS,,${CALLSIGN}-${BBS_SSID},${suffix}BBS,255
+APPLICATION 2,CHAT,,${CALLSIGN}-${CHAT_SSID},${suffix}CHT,255
+LINMAIL
+LINCHAT
+CFG
+  install -m 600 "$tmp" "$CFG"
+  rm -f "$tmp"
+  echo "$path" > "$PATH_FILE"
+  echo "LinBPQ config written: $CFG (radio path: $path)"
+}
+
+node_running() { systemctl is-active --quiet linbpq 2>/dev/null; }
+
+do_start() {
+  local path
+  path=$(pick_path "$1") || exit 1
+
+  case "$path" in
+    uvpro)
+      if pgrep -x kissattach >/dev/null; then
+        die "The UV-PRO is in use for Winlink or axcall. Run 'et-uv-pro disconnect' first."
+      fi
+      if [ ! -e "$KISS_DEVICE" ]; then
+        echo "Connecting the UV-PRO (Bluetooth serial only)..."
+        et-uv-pro connect serial || exit 1
+      fi
+      ;;
+    direwolf)
+      if ! systemctl is-active --quiet direwolf 2>/dev/null; then
+        echo "Starting Direwolf..."
+        sudo systemctl start direwolf || die "Direwolf did not start."
+      fi
+      ;;
+  esac
+
+  write_config "$path" || exit 1
+  sudo systemctl restart linbpq || die "Could not start LinBPQ. See: journalctl -u linbpq -n 30"
+
+  local n=0
+  until node_running && { ss -ltn 2>/dev/null | grep -q ":${TELNET_PORT} "; }; do
+    sleep 1; n=$((n + 1))
+    [ "$n" -ge 15 ] && die "LinBPQ did not come up. See: journalctl -u linbpq -n 30"
+  done
+
+  echo -e "${GREEN}Node running on the ${path} path.${NC}"
+  echo "  Node:  ${CALLSIGN}-${NODE_SSID}   BBS: ${CALLSIGN}-${BBS_SSID}   Chat: ${CALLSIGN}-${CHAT_SSID}"
+  echo "  Web admin: http://localhost:${HTTP_PORT}   user: sysop   password: $(head -n 1 "$PW_FILE" 2>/dev/null)"
+  echo "  Your own console: telnet localhost ${TELNET_PORT}"
+  [ "$path" = "uvpro" ] && echo "  Paracon can use the radio through the node: et-paracon"
+  echo "  Stop: et-bbs-server stop"
+}
+
+do_stop() {
+  if node_running; then
+    sudo systemctl stop linbpq && echo "LinBPQ stopped."
+  else
+    echo "LinBPQ was not running."
+  fi
+  if [ "$(cat "$PATH_FILE" 2>/dev/null)" = "uvpro" ] && [ -e "$KISS_DEVICE" ]; then
+    echo -e "${YELLOW}The UV-PRO Bluetooth link is still up. Close it with: et-uv-pro disconnect${NC}"
+  fi
+}
+
+case "$1" in
+  start)  do_start "$2" ;;
+  stop)   do_stop ;;
+  config) write_config "$(pick_path "${2:-$(cat "$PATH_FILE" 2>/dev/null || echo uvpro)}")" ;;
+  status)
+    if node_running; then
+      echo "LinBPQ: running (radio path: $(cat "$PATH_FILE" 2>/dev/null || echo unknown))"
+      echo "Web admin: http://localhost:${HTTP_PORT}"
+    else
+      echo "LinBPQ: not running"
+    fi
+    ;;
+  *) usage; exit 1 ;;
+esac
+{% endraw %}

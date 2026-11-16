@@ -46,9 +46,23 @@ js8call_install_method: "appimage"
 # --- WSJT-X ---
 # Callsign/grid are read from /etc/hamradio/state at runtime.
 
-# --- LinBPQ ---
-# Callsign/sysop are read from /etc/hamradio/state at runtime.
-linbpq_ssid: 7                       # node will be CALLSIGN-7
+# --- LinBPQ (packet node + BBS) ---
+# Callsign and grid come from /etc/hamradio/state when et-bbs-server starts it.
+# Built from source; linbpq_version is a commit of github.com/g8bpq/linbpq.
+linbpq_repo_url: "https://github.com/g8bpq/linbpq.git"
+linbpq_version: "228047d76f410e13a564fb00787516f69b96ff44"   # 6.0.26.1, Oct 2026
+linbpq_src_dir: "/usr/local/src/linbpq"
+linbpq_html_url: "https://www.cantab.net/users/john.wiseman/Downloads/Beta/HTMLPages.zip"
+libbacktrace_version: "master"
+linbpq_ssid: 7                       # node:  CALLSIGN-7
+linbpq_bbs_ssid: 11                  # BBS:   CALLSIGN-11
+linbpq_chat_ssid: 12                 # chat:  CALLSIGN-12
+linbpq_agw_port: 8000                # AGWPE port BPQ offers Paracon (UV-PRO path)
+linbpq_telnet_port: 8010
+linbpq_http_port: 8012
+
+# --- Paracon (packet terminal / BBS client) ---
+paracon_version: "1.3.0"
 
 # --- (tr)uSDX ---
 # Set to true to install the miltonics truSDX-Linux driver
@@ -106,12 +120,4 @@ mercury_repo_url: "https://github.com/Rhizomatica/mercury.git"
 mercury_src_dir: "/usr/local/src/mercury"
 mercury_tcp_port: 8300               # VARA-style TNC: control 8300, data 8301
 
-# --- LinBPQ ---
-# Placeholders — et-user will overwrite these at runtime via /etc/hamradio/state
-linbpq_callsign: "N0CALL"
-linbpq_node_alias: "NODE"
-linbpq_sysop: "N0CALL"
-
-# --- LinBPQ placeholders (et-user overwrites at runtime) ---
-operator_gridsquare: "AA00aa"
 
