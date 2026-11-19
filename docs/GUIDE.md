@@ -53,9 +53,9 @@ After it finishes:
 
 ### What install-basic.sh includes
 
-`base, audio, hamlib, ardop, mercury, wsjtx, js8call, pat, uvpro, linbpq, paracon, voacap, predict, aircraft, trusdx, glue`
+`base, audio, hamlib, ardop, mercury, wsjtx, js8call, pat, uvpro, linbpq, paracon, voacap, predict, aircraft, sdrpp, trusdx, glue`
 
-It skips chattervox, APRS (yaac), SDR (sdrpp), Kiwix (offline Wikipedia, a very large download), and the conky desktop widget. You can add any of these later (see "Installing or updating one piece").
+It skips chattervox, APRS (yaac), Kiwix (offline Wikipedia, a very large download), and the conky desktop widget. You can add any of these later (see "Installing or updating one piece").
 
 ---
 
