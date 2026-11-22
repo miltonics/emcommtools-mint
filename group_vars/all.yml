@@ -115,7 +115,7 @@ uvpro_ax25_port: "wl2k"              # AX.25 port name in /etc/ax25/axports
 # --- Mercury HF modem (Rhizomatica) ---
 # Built from source. Both ends of a link must run Mercury 1.9.20 or newer.
 mercury_install: true
-mercury_version: "v1.9.24"
+mercury_version: "v1.9.25"
 mercury_repo_url: "https://github.com/Rhizomatica/mercury.git"
 mercury_src_dir: "/usr/local/src/mercury"
 mercury_tcp_port: 8300               # VARA-style TNC: control 8300, data 8301
